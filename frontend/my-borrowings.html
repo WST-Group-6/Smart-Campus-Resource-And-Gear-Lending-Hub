@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>My Borrowings | CampusLend</title>
+
+    <link rel="stylesheet" href="css/my-borrowings.css">
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <header class="navbar">
+        <div class="nav-container">
+
+            <a href="index.html" class="logo">CampusLend</a>
+
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="browse.html">Browse Resources</a>
+                <a href="my-borrowings.html" class="active">
+                    My Borrowings
+                </a>
+                <a href="login.html">Login</a>
+                <a href="register.html" class="nav-button">Join Now</a>
+            </nav>
+
+        </div>
+    </header>
+
+
+    <!-- Main Content -->
+    <main class="page-container">
+
+        <!-- Page Heading -->
+        <section class="page-heading">
+            <div>
+                <p class="eyebrow">STUDENT DASHBOARD</p>
+
+                <h1>My Borrowings</h1>
+
+                <p class="subtitle">
+                    Track your resource requests and manage your borrowed items.
+                </p>
+            </div>
+
+            <a href="browse.html" class="browse-button">
+                + Browse Resources
+            </a>
+        </section>
+
+
+        <!-- Dashboard Statistics -->
+        <section class="stats-grid">
+
+            <div class="stat-card">
+                <div class="stat-icon purple">📋</div>
+                <p>Total Requests</p>
+                <h2 id="total-requests">0</h2>
+                <span>All borrowing records</span>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon orange">⏳</div>
+                <p>Pending Requests</p>
+                <h2 id="pending-requests">0</h2>
+                <span>Waiting for approval</span>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon blue">📦</div>
+                <p>Currently Borrowed</p>
+                <h2 id="borrowed-requests">0</h2>
+                <span>Items not yet returned</span>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-icon green">✓</div>
+                <p>Returned Items</p>
+                <h2 id="returned-requests">0</h2>
+                <span>Successfully returned</span>
+            </div>
+
+        </section>
+
+
+        <!-- Borrowing Records -->
+        <section class="records-section">
+
+            <div class="records-heading">
+                <div>
+                    <h2>Borrowing History</h2>
+
+                    <p>
+                        View and track your borrowing requests.
+                    </p>
+                </div>
+
+                <span class="demo-badge">DEMO DATA</span>
+            </div>
+
+
+            <!-- Search and Filter -->
+            <div class="filter-container">
+
+                <div class="search-box">
+                    <label for="search-input" class="visually-hidden">
+                        Search borrowing records
+                    </label>
+
+                    <input
+                        type="search"
+                        id="search-input"
+                        placeholder="Search by resource name..."
+                    >
+                </div>
+
+                <div class="filter-box">
+                    <label for="status-filter">Filter by status</label>
+
+                    <select id="status-filter">
+                        <option value="All">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Borrowed">Borrowed</option>
+                        <option value="Returned">Returned</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+
+            </div>
+
+
+            <!-- Records Table -->
+            <div class="table-wrapper">
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Resource</th>
+                            <th>Borrow Date</th>
+                            <th>Return Date</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="borrowings-table-body">
+                        <!-- JavaScript adds the sample records here -->
+                    </tbody>
+                </table>
+
+            </div>
+
+
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state" hidden>
+                <div class="empty-icon">🔎</div>
+
+                <h3>No borrowing records found</h3>
+
+                <p>
+                    Try another search term or select a different status.
+                </p>
+
+                <button id="clear-filters" class="clear-button">
+                    Clear Filters
+                </button>
+            </div>
+
+
+            <!-- Record Count -->
+            <div class="table-footer">
+                <p id="record-count">Showing 0 records</p>
+            </div>
+
+        </section>
+
+
+        <!-- Helpful Information -->
+        <section class="help-card">
+
+            <div class="help-icon">💡</div>
+
+            <div>
+                <h3>Remember to return items on time!</h3>
+
+                <p>
+                    Check your expected return dates regularly and keep
+                    borrowed resources in good condition. Contact the
+                    resource owner if you need assistance.
+                </p>
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>
+            &copy; 2026 CampusLend. Share Resources, Build Community.
+        </p>
+    </footer>
+
+
+    <script src="js/my-borrowings.js"></script>
+
+</body>
+</html>

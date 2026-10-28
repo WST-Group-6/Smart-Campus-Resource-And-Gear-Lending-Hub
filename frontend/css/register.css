@@ -1,0 +1,314 @@
+/* Registration Page */
+
+.register-section {
+    min-height: calc(100vh - 150px);
+    padding: 60px 24px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f7f8fc;
+}
+
+.register-container {
+    width: 100%;
+    max-width: 1100px;
+    display: grid;
+    grid-template-columns: 1fr 460px;
+    align-items: center;
+    gap: 60px;
+}
+
+/* Left Information Section */
+
+.register-info h1 {
+    margin: 18px 0;
+    color: #17213a;
+    font-size: clamp(2.2rem, 4vw, 3.4rem);
+    line-height: 1.2;
+    letter-spacing: -1px;
+}
+
+.register-info h1 span {
+    display: block;
+    color: #6754e8;
+}
+
+.register-info > p {
+    max-width: 470px;
+    color: #697386;
+    font-size: 1rem;
+    line-height: 1.8;
+}
+
+.register-benefits {
+    display: grid;
+    gap: 22px;
+    margin-top: 32px;
+}
+
+.benefit-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.benefit-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    background: #e8e5ff;
+    color: #6754e8;
+    font-weight: bold;
+}
+
+.benefit-item h3 {
+    margin: 2px 0 5px;
+    color: #17213a;
+    font-size: 1rem;
+}
+
+.benefit-item p {
+    margin: 0;
+    color: #697386;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* Registration Card */
+
+.register-card {
+    width: 100%;
+    padding: 35px;
+    border: 1px solid #e9eaf2;
+    border-radius: 18px;
+    background: #ffffff;
+    box-shadow: 0 15px 45px rgba(32, 41, 75, 0.08);
+}
+
+.form-heading {
+    margin-bottom: 25px;
+}
+
+.form-heading h2 {
+    margin: 0 0 9px;
+    color: #17213a;
+    font-size: 1.8rem;
+}
+
+.form-heading p {
+    margin: 0;
+    color: #788195;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+/* Form Fields */
+
+.form-group {
+    margin-bottom: 18px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #283149;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.form-group input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 46px;
+    padding: 0 13px;
+    border: 1px solid #dfe2ec;
+    border-radius: 9px;
+    outline: none;
+    background: #ffffff;
+    color: #17213a;
+    font-family: inherit;
+    font-size: 0.9rem;
+}
+
+.form-group input:focus {
+    border-color: #6754e8;
+    box-shadow: 0 0 0 3px rgba(103, 84, 232, 0.12);
+}
+
+.form-group input::placeholder {
+    color: #a0a6b5;
+}
+
+.input-hint {
+    display: block;
+    margin-top: 6px;
+    color: #788195;
+    font-size: 0.78rem;
+}
+
+/* Terms and Conditions */
+
+.terms-group {
+    margin: 5px 0 20px;
+}
+
+.terms-group label {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    color: #697386;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    cursor: pointer;
+}
+
+.terms-group input {
+    margin-top: 4px;
+    accent-color: #6754e8;
+}
+
+/* Feedback Message */
+
+.form-message {
+    display: none;
+    margin: 0 0 15px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.form-message.visible {
+    display: block;
+}
+
+.form-message.error {
+    color: #c62828;
+}
+
+.form-message.success {
+    color: #21804a;
+}
+
+/* Registration Button */
+
+.register-button {
+    width: 100%;
+    min-height: 48px;
+    border: none;
+    border-radius: 9px;
+    background: #6754e8;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.register-button:hover {
+    background: #5542d2;
+    transform: translateY(-1px);
+}
+
+.register-button:focus-visible {
+    outline: 3px solid #bdb4ff;
+    outline-offset: 3px;
+}
+
+/* Login and Home Links */
+
+.login-text {
+    margin: 22px 0 0;
+    color: #697386;
+    text-align: center;
+    font-size: 0.88rem;
+}
+
+.login-text a {
+    color: #6754e8;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.login-text a:hover {
+    text-decoration: underline;
+}
+
+.back-home {
+    display: block;
+    margin-top: 20px;
+    color: #697386;
+    text-align: center;
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.back-home:hover {
+    color: #6754e8;
+}
+
+/* Footer */
+
+.register-footer {
+    padding: 20px;
+    border-top: 1px solid #e9eaf2;
+    background: #ffffff;
+    text-align: center;
+}
+
+.register-footer p {
+    margin: 0;
+    color: #788195;
+    font-size: 0.82rem;
+}
+
+/* Responsive Layout */
+
+@media (max-width: 900px) {
+    .register-container {
+        max-width: 520px;
+        grid-template-columns: 1fr;
+        gap: 35px;
+    }
+
+    .register-info {
+        text-align: center;
+    }
+
+    .register-info > p {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .register-benefits {
+        max-width: 380px;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: left;
+    }
+}
+
+@media (max-width: 600px) {
+    .register-section {
+        padding: 35px 16px;
+    }
+
+    .register-card {
+        padding: 25px 20px;
+    }
+
+    .register-info h1 {
+        font-size: 2.2rem;
+    }
+
+    .nav-links {
+        gap: 12px;
+    }
+
+    .nav-links a {
+        font-size: 0.8rem;
+    }
+}

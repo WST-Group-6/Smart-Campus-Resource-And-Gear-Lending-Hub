@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Login | CampusLend</title>
+
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/login.css">
+</head>
+
+<body>
+
+    <!-- Navigation Bar -->
+    <header class="navbar">
+        <div class="container nav-container">
+
+            <a href="index.html" class="logo">
+                Campus<span>Lend</span>
+            </a>
+
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="index.html#how-it-works">How It Works</a>
+                <a href="register.html" class="nav-button">
+                    Create Account
+                </a>
+            </nav>
+
+        </div>
+    </header>
+
+
+    <!-- Login Section -->
+    <main class="login-section">
+
+        <div class="login-container">
+
+            <!-- Left Side -->
+            <div class="login-info">
+
+                <span class="eyebrow">WELCOME TO CAMPUSLEND</span>
+
+                <h1>
+                    Your campus resources,
+                    <span>one step away.</span>
+                </h1>
+
+                <p>
+                    Sign in to borrow, lend, and share useful resources
+                    with your university community.
+                </p>
+
+                <div class="benefits">
+
+                    <div class="benefit-item">
+                        <span class="benefit-icon">✓</span>
+                        <div>
+                            <h3>Easy Borrowing</h3>
+                            <p>Request the resources you need.</p>
+                        </div>
+                    </div>
+
+                    <div class="benefit-item">
+                        <span class="benefit-icon">✓</span>
+                        <div>
+                            <h3>Share Resources</h3>
+                            <p>Help other students by lending items.</p>
+                        </div>
+                    </div>
+
+                    <div class="benefit-item">
+                        <span class="benefit-icon">✓</span>
+                        <div>
+                            <h3>Track Your Requests</h3>
+                            <p>Keep track of your borrowing activity.</p>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <!-- Right Side: Login Form -->
+            <div class="login-card">
+
+                <div class="form-heading">
+                    <h2>Welcome Back!</h2>
+                    <p>Enter your details to access your account.</p>
+                </div>
+
+                <form id="loginForm">
+
+                    <div class="form-group">
+                        <label for="email">University Email</label>
+
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            placeholder="Enter your university email"
+                            autocomplete="username"
+                            required
+                        >
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">Password</label>
+
+                        <div class="password-wrapper">
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                placeholder="Enter your password"
+                                autocomplete="current-password"
+                                required
+                            >
+
+                            <button
+                                type="button"
+                                class="toggle-password"
+                                id="togglePassword"
+                                aria-label="Show password"
+                            >
+                                Show
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-options">
+                        <label class="remember-label">
+                            <input type="checkbox" id="rememberMe">
+                            <span>Remember me</span>
+                        </label>
+
+                        <a href="#" id="forgotPassword">
+                            Forgot password?
+                        </a>
+                    </div>
+
+                    <p
+                        id="loginMessage"
+                        class="form-message"
+                        role="status"
+                        aria-live="polite"
+                    ></p>
+
+                    <button type="submit" class="login-button">
+                        Sign In
+                    </button>
+
+                </form>
+
+                <div class="form-divider">
+                    <span>NEW TO CAMPUSLEND?</span>
+                </div>
+
+                <p class="register-text">
+                    Don't have an account?
+                    <a href="register.html">Create an account</a>
+                </p>
+
+                <a href="index.html" class="back-home">
+                    ← Back to Home
+                </a>
+
+            </div>
+
+        </div>
+
+    </main>
+
+
+    <!-- Footer -->
+    <footer class="login-footer">
+        <p>© 2026 CampusLend. Built for the university community.</p>
+    </footer>
+
+    <script src="js/auth.js"></script>
+
+</body>
+</html>

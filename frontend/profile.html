@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>My Profile | CampusLend</title>
+
+    <link rel="stylesheet" href="css/profile.css">
+</head>
+
+<body>
+
+    <!-- Navigation Bar -->
+    <header class="navbar">
+        <div class="nav-container">
+
+            <a href="index.html" class="logo">CampusLend</a>
+
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="browse.html">Browse Resources</a>
+                <a href="my-borrowings.html">My Borrowings</a>
+                <a href="profile.html" class="active">My Profile</a>
+                <a href="login.html">Login</a>
+            </nav>
+
+        </div>
+    </header>
+
+
+    <!-- Main Content -->
+    <main class="profile-container">
+
+        <!-- Page Heading -->
+        <section class="page-heading">
+            <p class="eyebrow">STUDENT ACCOUNT</p>
+
+            <h1>My Profile</h1>
+
+            <p>
+                View and manage your personal and academic information.
+            </p>
+        </section>
+
+
+        <!-- Profile Layout -->
+        <div class="profile-layout">
+
+            <!-- Left Profile Card -->
+            <aside class="profile-sidebar">
+
+                <div class="profile-avatar" id="profile-avatar">
+                    S
+                </div>
+
+                <h2 id="sidebar-name">Student Name</h2>
+
+                <p class="student-role">CampusLend Student</p>
+
+                <span class="account-badge">
+                    Demo Account
+                </span>
+
+                <div class="sidebar-divider"></div>
+
+                <a href="browse.html" class="sidebar-link">
+                    Browse Resources
+                </a>
+
+                <a href="my-borrowings.html" class="sidebar-link">
+                    My Borrowings
+                </a>
+
+                <a href="profile.html" class="sidebar-link selected">
+                    My Profile
+                </a>
+
+                <a href="login.html" class="sidebar-link">
+                    Login Page
+                </a>
+
+            </aside>
+
+
+            <!-- Right Profile Content -->
+            <section class="profile-content">
+
+                <!-- Profile Header -->
+                <div class="content-header">
+
+                    <div>
+                        <h2>Personal Information</h2>
+
+                        <p>
+                            Your profile information is displayed below.
+                        </p>
+                    </div>
+
+                    <button
+                        type="button"
+                        id="edit-profile-button"
+                        class="edit-button"
+                    >
+                        ✎ Edit Profile
+                    </button>
+
+                </div>
+
+
+                <!-- Profile Form -->
+                <form id="profile-form">
+
+                    <div class="form-grid">
+
+                        <!-- Full Name -->
+                        <div class="form-group">
+                            <label for="full-name">Full Name</label>
+
+                            <input
+                                type="text"
+                                id="full-name"
+                                name="fullName"
+                                value="Student Name"
+                                required
+                                minlength="2"
+                                maxlength="100"
+                                disabled
+                            >
+                        </div>
+
+
+                        <!-- Student ID -->
+                        <div class="form-group">
+                            <label for="student-id">Student ID</label>
+
+                            <input
+                                type="text"
+                                id="student-id"
+                                name="studentId"
+                                value="STU2026001"
+                                disabled
+                            >
+
+                            <small>
+                                Student ID cannot be changed here.
+                            </small>
+                        </div>
+
+
+                        <!-- University Email -->
+                        <div class="form-group">
+                            <label for="email">University Email</label>
+
+                            <input
+                                type="email"
+                                id="email"
+                                name="email"
+                                value="student@example.com"
+                                required
+                                maxlength="254"
+                                disabled
+                            >
+                        </div>
+
+
+                        <!-- Contact Number -->
+                        <div class="form-group">
+                            <label for="phone">Contact Number</label>
+
+                            <input
+                                type="tel"
+                                id="phone"
+                                name="phone"
+                                placeholder="Enter your contact number"
+                                maxlength="20"
+                                disabled
+                            >
+                        </div>
+
+
+                        <!-- Faculty -->
+                        <div class="form-group">
+                            <label for="faculty">Faculty</label>
+
+                            <input
+                                type="text"
+                                id="faculty"
+                                name="faculty"
+                                placeholder="Enter your faculty"
+                                maxlength="100"
+                                disabled
+                            >
+                        </div>
+
+
+                        <!-- Department -->
+                        <div class="form-group">
+                            <label for="department">Department</label>
+
+                            <input
+                                type="text"
+                                id="department"
+                                name="department"
+                                placeholder="Enter your department"
+                                maxlength="100"
+                                disabled
+                            >
+                        </div>
+
+
+                        <!-- Academic Year -->
+                        <div class="form-group">
+                            <label for="academic-year">Academic Year</label>
+
+                            <select
+                                id="academic-year"
+                                name="academicYear"
+                                disabled
+                            >
+                                <option value="">Select academic year</option>
+                                <option value="1">1st Year</option>
+                                <option value="2">2nd Year</option>
+                                <option value="3">3rd Year</option>
+                                <option value="4">4th Year</option>
+                                <option value="5">5th Year</option>
+                            </select>
+                        </div>
+
+
+                        <!-- Account Status -->
+                        <div class="form-group">
+                            <label for="account-status">Account Status</label>
+
+                            <input
+                                type="text"
+                                id="account-status"
+                                value="Demo Account"
+                                disabled
+                            >
+                        </div>
+
+                    </div>
+
+
+                    <!-- Form Messages -->
+                    <div
+                        id="profile-message"
+                        class="message"
+                        role="status"
+                        aria-live="polite"
+                    ></div>
+
+
+                    <!-- Form Buttons -->
+                    <div
+                        id="form-actions"
+                        class="form-actions"
+                        hidden
+                    >
+
+                        <button
+                            type="submit"
+                            class="save-button"
+                        >
+                            Save Changes
+                        </button>
+
+                        <button
+                            type="button"
+                            id="cancel-edit-button"
+                            class="cancel-button"
+                        >
+                            Cancel
+                        </button>
+
+                    </div>
+
+                </form>
+
+
+                <!-- Account Information -->
+                <div class="account-info">
+
+                    <h3>Account Information</h3>
+
+                    <div class="account-info-row">
+                        <span>Account Type</span>
+                        <strong>Student</strong>
+                    </div>
+
+                    <div class="account-info-row">
+                        <span>Platform</span>
+                        <strong>CampusLend</strong>
+                    </div>
+
+                    <div class="account-info-row">
+                        <span>Profile Mode</span>
+                        <strong>Frontend Demo</strong>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>
+            &copy; 2026 CampusLend. Share Resources, Build Community.
+        </p>
+    </footer>
+
+
+    <script src="js/profile.js"></script>
+
+</body>
+</html>
