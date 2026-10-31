@@ -1,254 +1,250 @@
-# CampusShare – Backend Database Guide
+# CampusShare — Backend Database Integration Guide
 
 **Project:** Smart Campus Resource & Gear Lending Hub  
-**Database:** MySQL (`campusshare_db`)  
-**Prepared by:** Database Team – Member 2  
-**Status:** Development guide – pending integration with Member 1
+**Database:** MySQL  
+**Backend:** Java Spring Boot  
+**Database schema:** `01_campusshare_schema.sql`
 
-## 1. Purpose
+## 1. Database Structure
 
-This guide explains how the backend team should interact with the lending database, including borrowing requests, owner approvals, loans, condition records, ratings, notifications, issue reports, and activity logs.
+The CampusShare database contains 14 tables.
 
-**Important:** Only the item owner can approve or reject a borrowing request. Administrators do not approve borrowing requests.
+**Core tables:**
+- `users`
+- `roles`
+- `user_roles`
+- `departments`
+- `categories`
+- `items`
+- `item_images`
 
-## 2. Member 2 Database Tables
+**Lending tables:**
+- `borrow_requests`
+- `loans`
+- `condition_records`
+- `ratings`
+- `notifications`
+- `reported_issues`
+- `activity_logs`
 
-| Table | Purpose |
-|---|---|
-| `borrow_requests` | Stores borrowing requests and approval decisions |
-| `loans` | Stores active and completed loans |
-| `condition_records` | Records item condition during handover and return |
-| `ratings` | Stores user ratings after completed loans |
-| `notifications` | Stores in-app notifications |
-| `reported_issues` | Records damage reports and disputes |
-| `activity_logs` | Records important system activities |
+The backend must use the exact column names defined in `01_campusshare_schema.sql`.
 
-## 3. Complete Borrowing Workflow
+## 2. User Roles
 
-### Step 1 – Borrower submits request
+The system supports borrowers, item owners, department representatives, and administrators.
 
-The borrower selects an item and enters the requested start and end dates.
+One account can have multiple roles through `user_roles`.
 
-Backend responsibilities:
-- Verify that the borrower is authenticated.
-- Confirm that the item exists and is available.
-- Validate the requested dates.
-- Create a record in `borrow_requests` with status `Pending`.
-- Notify the item owner if request notifications are implemented.
+**Important:** Only the owner of an item can approve or reject its borrowing requests. Administrators do not approve borrowing requests.
 
-### Step 2 – Item owner approves or rejects
+The backend must check permissions before performing protected operations.
 
-The backend must verify that the authenticated user owns the requested item.
+## 3. Borrowing Request Workflow
 
-If approved:
-- Check that no approved reservation or active loan conflicts with the requested dates.
-- Change the request status from `Pending` to `Approved`.
-- Record `decided_at`.
-- Reserve the approved period.
-- Create an approval notification for the borrower.
+### Step 1 — Submit Request
 
-If rejected:
-- Change the request status from `Pending` to `Rejected`.
-- Record `decided_at`.
-- Notify the borrower.
+A borrower selects an item and submits the requested borrowing dates.
 
-**Do not create an active loan immediately when the owner approves.**
+Table: `borrow_requests`
 
-### Step 3 – Borrower confirms handover
+Required columns:
+- `item_id`
+- `borrower_id`
+- `requested_start`
+- `requested_end`
 
-When the physical item is handed over, the borrower confirms receipt.
+Initial status: `Pending`.
 
-Backend responsibilities:
-- Verify the approved request.
-- Verify that the authenticated borrower is the person named in the request.
-- Create a record in `loans`.
-- Set loan status to `Active`.
-- Record the handover timestamp.
-- Allow the parties to record the item's condition.
+The backend must validate the dates and prevent users from requesting their own items.
 
-### Step 4 – Item is returned
+### Step 2 — Owner Decision
 
-When the borrower returns the item:
-- Record the return condition.
-- Record the physical return timestamp.
-- Obtain the owner's confirmation.
-- Update the loan status to `Completed`.
-- Record the completion timestamp.
+The item owner reviews the pending request.
 
-The backend must distinguish physical return from owner-confirmed completion.
+**Approval:**
+- Set `status = 'Approved'`.
+- Set `approved_start` and `approved_end`.
+- Set `decided_at`.
 
-### Step 5 – Ratings
+**Rejection:**
+- Set `status = 'Rejected'`.
+- Set `decided_at`.
 
-After a loan is completed:
-- Allow eligible participants to submit ratings.
-- Validate that the rating is between 1 and 5.
-- Prevent users from rating themselves.
-- Prevent duplicate ratings by the same reviewer for the same loan.
+Before approval, the backend must verify that the approved dates do not overlap another approved reservation or active loan for the same item.
 
-### Step 6 – Issue reporting
+Only pending requests can be approved or rejected.
 
-Users can report item damage, condition disagreements, or other lending issues.
+### Step 3 — Request Cancellation
 
-The backend must:
-- Identify the related loan or borrowing request.
-- Record the reporting user.
-- Store the issue description and status.
-- Flag condition disagreements for administrator review.
+The borrower may cancel their own request while it is pending.
 
-Administrators review disputes, not borrowing approvals.
+Update:
+- `status = 'Cancelled'`
+- `cancelled_at = CURRENT_TIMESTAMP`
 
-## 4. Borrowing Request Statuses
+Do not allow cancellation of approved or active borrowing transactions without an additional approved policy.
 
-| Status | Meaning |
-|---|---|
-| `Pending` | Waiting for item owner's decision |
-| `Approved` | Owner accepted the borrowing request |
-| `Rejected` | Owner rejected the request |
-| `Cancelled` | Borrower cancelled while Pending |
+### Step 4 — Notifications
 
-Allowed request transitions:
-- `Pending` → `Approved`
-- `Pending` → `Rejected`
-- `Pending` → `Cancelled`
+After an owner approves or rejects a request, create an in-app notification.
 
-Approved, rejected, and cancelled requests should not be changed back to Pending without a separately approved policy.
+Table: `notifications`
 
-## 5. Loan Statuses
+Relevant columns:
+- `recipient_id`
+- `request_id`
+- `event_type`
+- `message`
+- `read_at`
+- `created_at`
 
-| Status | Meaning |
-|---|---|
-| `Active` | Borrower confirmed handover |
-| `Completed` | Owner confirmed completion after return |
+The borrower receives the notification.
 
-Allowed loan transition:
+### Step 5 — Item Handover
 
-`Active` → `Completed`
+After approval and physical handover confirmation, the backend creates a loan.
 
-The current schema does not define an intermediate `Returned` loan status. Use the existing return timestamps and agreed backend workflow.
+Table: `loans`
 
-## 6. Required Backend Operations
+Relevant columns:
+- `request_id`
+- `approved_due_at`
+- `handover_at`
+- `status`
 
-| Operation | Main table | Required validation |
-|---|---|---|
-| Create borrowing request | `borrow_requests` | Borrower, item, dates and availability |
-| Approve request | `borrow_requests` | Authenticated item owner, Pending status, no overlap |
-| Reject request | `borrow_requests` | Authenticated item owner, Pending status |
-| Cancel request | `borrow_requests` | Authenticated borrower, Pending status |
-| Confirm handover | `loans` | Correct borrower, approved request, no existing loan |
-| Record condition | `condition_records` | Authorized loan participant and valid stage |
-| Complete loan | `loans` | Authorized owner, Active loan, confirmed return |
-| Submit rating | `ratings` | Completed loan, eligible reviewer, rating 1–5 |
-| Create notification | `notifications` | Correct recipient and event |
-| Report issue | `reported_issues` | Valid request or loan and authorized reporter |
-| Record activity | `activity_logs` | Valid action details and authenticated user where applicable |
+Initial loan status: `Active`.
 
-## 7. Overlapping Reservation Rule
+Each borrowing request can have at most one loan because `loans.request_id` is unique.
 
-Two approved borrowing requests for the same item must not have overlapping dates.
+### Step 6 — Condition Recording
 
-Use this overlap condition:
+The borrower and owner separately record the item's condition at handover and return.
 
-`existing_start <= requested_end AND existing_end >= requested_start`
+Table: `condition_records`
 
-Pending requests do not reserve an item.
+Relevant columns:
+- `loan_id`
+- `actor_id`
+- `phase`
+- `condition_value`
+- `confirmation`
+- `recorded_at`
 
-The backend must perform the availability check and approval as one safe database transaction. Concurrent approvals must be serialized or protected with an appropriate locking strategy to prevent two requests for the same item from being approved simultaneously.
+The `phase` value must be `handover` or `return`.
 
-The existing SQL tests demonstrate overlap detection only. Automatic overlap prevention is not yet implemented in the database.
+The `confirmation` value must be `confirmed` or `disputed`.
 
-## 8. Database Relationships
+If the two parties disagree about the condition, the backend should flag the disagreement for administrator review.
 
-Existing Member 2 foreign keys:
+### Step 7 — Item Return
 
-| Child table | Parent table |
-|---|---|
-| `loans` | `borrow_requests` |
-| `condition_records` | `loans` |
-| `ratings` | `loans` |
-| `notifications` | `borrow_requests` |
-| `reported_issues` | `loans` |
-| `reported_issues` | `borrow_requests` |
+After the borrower returns the item and the owner confirms the return, update the loan:
 
-Pending integration with Member 1:
+- `status = 'Completed'`
+- `actual_return_at`
+- `owner_return_confirmed_at`
 
-- `borrow_requests.item_id` → `items`
-- `borrow_requests.borrower_id` → `users`
-- `condition_records.recorded_by` → `users`
-- `ratings.reviewer_id` → `users`
-- `ratings.reviewed_user_id` → `users`
-- `notifications.user_id` → `users`
-- `reported_issues.reported_by` → `users`
-- `activity_logs.user_id` → `users`
+The backend must verify that the authenticated user is the item's owner before accepting owner confirmation.
 
-The exact referenced primary-key names and column types must be confirmed from Member 1's schema before adding these foreign keys.
+### Step 8 — Rating
 
-## 9. Recommended Backend API Endpoints
+Ratings are allowed only after the loan is completed.
 
-These are proposed endpoints for the backend team to agree on, not endpoints already implemented.
+Table: `ratings`
 
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/api/borrow-requests` | Submit request |
-| GET | `/api/borrow-requests/my` | View borrower's requests |
-| GET | `/api/borrow-requests/owner` | View requests for owner's items |
-| PATCH | `/api/borrow-requests/{id}/approve` | Owner approves |
-| PATCH | `/api/borrow-requests/{id}/reject` | Owner rejects |
-| PATCH | `/api/borrow-requests/{id}/cancel` | Borrower cancels Pending request |
-| POST | `/api/borrow-requests/{id}/handover` | Confirm handover and create loan |
-| POST | `/api/loans/{id}/conditions` | Record condition |
-| PATCH | `/api/loans/{id}/complete` | Confirm return and complete loan |
-| POST | `/api/loans/{id}/ratings` | Submit rating |
-| GET | `/api/notifications` | View notifications |
-| POST | `/api/reported-issues` | Report an issue |
+Relevant columns:
+- `loan_id`
+- `rater_id`
+- `target_type`
+- `target_user_id`
+- `stars`
 
-The backend must derive the authenticated user's identity from its authentication system, not trust arbitrary user IDs submitted by the frontend.
+The rating value must be between 1 and 5.
 
-## 10. Transaction Requirements
+The backend must validate that the reviewer participated in the borrowing transaction and is rating an allowed target.
 
-Use database transactions for operations that modify several related records.
+### Step 9 — Reported Issues
 
-Examples:
-- Approving a request and creating a notification.
-- Confirming handover and creating a loan.
-- Recording return information and completing a loan.
-- Reporting a condition dispute and creating the related issue.
+Table: `reported_issues`
 
-If any required operation fails, roll back the transaction.
+Relevant columns:
+- `loan_id`
+- `item_id`
+- `reporter_id`
+- `resolved_by`
+- `description`
+- `status`
+- `resolution`
+- `resolved_at`
 
-## 11. Tests Already Completed
+Supported issue statuses:
+- `open`
+- `in_progress`
+- `resolved`
 
-The Member 2 database team has tested:
+The backend must verify permissions before allowing issue resolution.
 
-- Seven tables and their primary keys.
-- Six existing foreign keys.
-- Invalid borrowing date rejection.
-- Invalid rating rejection.
-- Invalid loan foreign-key rejection.
-- Issue-reference validation.
-- Borrowing request creation and approval.
-- Loan creation and completion.
-- Condition records, notifications, ratings and activity logs.
-- Pending cancellation and owner rejection SQL operations.
-- Overlapping reservation detection.
+### Step 10 — Activity Logging
 
-These tests do not replace backend authorization, concurrency, integration, or end-to-end tests.
+Table: `activity_logs`
 
-## 12. Remaining Work
+Relevant columns:
+- `actor_id`
+- `action`
+- `entity_type`
+- `entity_id`
+- `created_at`
 
-1. Obtain Member 1's core SQL definitions.
-2. Confirm the `users` and `items` primary-key names and data types.
-3. Add and verify the missing foreign keys.
-4. Agree on the final condition-dispute workflow.
-5. Implement and test backend authentication and authorization.
-6. Implement safe overlapping-reservation prevention.
-7. Test the frontend–backend–database integration.
-8. Review the complete database before merging the GitHub Pull Request.
+Record important actions such as request submission, approval, rejection, cancellation, handover, return confirmation, and rating submission.
 
-## 13. Files Available in the Repository
+## 4. Backend Validation Requirements
 
-- `database/02_lending_tables.sql`
-- `database/03_verify_lending_tables.sql`
-- `database/04_test_lending_constraints.sql`
-- `database/05_test_borrowing_workflow.sql`
-- `database/06_test_request_scenarios.sql`
+The Spring Boot backend must enforce:
 
+1. Authentication and role-based authorization.
+2. Item-owner-only request approval and rejection.
+3. Valid borrowing and approved date ranges.
+4. Prevention of overlapping approved reservations and active loans.
+5. Pending-only request cancellation.
+6. Approved-request-only loan creation after handover confirmation.
+7. Completed-loan-only ratings.
+8. Valid rating participants and targets.
+9. Proper return confirmation.
+10. Transaction handling to prevent concurrent approvals from reserving the same item.
+
+**Important:** Database foreign keys and CHECK constraints do not enforce all these business rules. They must also be implemented in the backend.
+
+## 5. Database Testing
+
+The following scripts have been tested using `campusshare_integration_test`:
+
+- `03_verify_lending_tables.sql` — Table and relationship verification.
+- `04_test_lending_constraints.sql` — Database constraint testing.
+- `05_test_borrowing_workflow.sql` — Complete borrowing workflow simulation.
+- `06_test_request_scenarios.sql` — Cancellation, rejection, and overlapping-date detection.
+
+These tests passed for the scenarios covered. They do not replace backend API, authorization, or concurrency tests.
+
+## 6. Important Integration Notes
+
+- Use `01_campusshare_schema.sql` as the shared database schema.
+- Do not execute the old `02_lending_tables.sql`, because it defines incompatible versions of the lending tables.
+- Do not use `campusshare_integration_test` as the production database.
+- Agree on the final schema before the backend team creates Java entities and repositories.
+- Apply future schema changes through reviewed migration scripts.
+- Use transactions for approval, loan creation, and return operations.
+- Do not rely on frontend validation alone.
+
+## 7. Remaining Improvements
+
+Before final deployment, the team should review:
+
+- Date-range constraints.
+- Duplicate ratings and rating-target validation.
+- Condition-dispute handling.
+- Overlapping reservation enforcement.
+- Request and loan status-transition rules.
+- Appropriate foreign-key deletion behavior to preserve borrowing history.
+- Missing business-rule constraints that require backend implementation.
+
+**Database team status:** The shared
