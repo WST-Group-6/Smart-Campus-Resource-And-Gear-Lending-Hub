@@ -11,6 +11,12 @@ This guide explains how the backend team should interact with the lending databa
 
 **Important:** Only the item owner can approve or reject a borrowing request. Administrators do not approve borrowing requests.
 
+### Initialize the complete database
+
+Run [`01_campusshare_schema.sql`](./01_campusshare_schema.sql) in MySQL to create the `campusshare_db` database and all application tables, including users, items, and lending operations. Use a MySQL version that enforces `CHECK` constraints (8.0.16 or later).
+
+The other SQL files in this folder are supporting scripts for the earlier Member 2 lending-table schema. Do not run `02_lending_tables.sql` as the application schema when using the complete schema; it defines a different version of several lending tables.
+
 ## 2. Member 2 Database Tables
 
 | Table | Purpose |
@@ -251,4 +257,3 @@ These tests do not replace backend authorization, concurrency, integration, or e
 - `database/04_test_lending_constraints.sql`
 - `database/05_test_borrowing_workflow.sql`
 - `database/06_test_request_scenarios.sql`
-
