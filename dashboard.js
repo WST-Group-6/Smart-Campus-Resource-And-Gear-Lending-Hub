@@ -10,7 +10,6 @@ import {
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -20,6 +19,14 @@ import {
   serverTimestamp,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
 
 
 /* =========================================
@@ -35,6 +42,8 @@ let authReadyResolve;
 const authStateReady = new Promise((resolve) => {
   authReadyResolve = resolve;
 });
+
+const storage = getStorage();
 
 
 /* =========================================
@@ -52,6 +61,16 @@ const itemsList = document.getElementById("itemsList");
 const myRequestsList = document.getElementById("myRequestsList");
 const myBorrowingsList = document.getElementById("myBorrowingsList");
 const historyList = document.getElementById("historyList");
+
+const itemImageInput = document.getElementById("itemImage");
+const itemImagePreview = document.getElementById("itemImagePreview");
+const itemImagePreviewContainer =
+  document.getElementById("itemImagePreviewContainer");
+const removeItemImageButton = document.getElementById("removeItemImage");
+
+const profileImageInput = document.getElementById("profileImageInput");
+const profileImageMessage =
+  document.getElementById("profileImageMessage");
 
 
 /* =========================================
@@ -72,14 +91,12 @@ function escapeHTML(value) {
   });
 }
 
-
 function showMessage(element, message, type = "success") {
   if (!element) return;
 
   element.textContent = message;
   element.className = `message ${type}`;
 }
-
 
 function setButtonLoading(button, loading, loadingText = "Please wait...") {
   if (!button) return;
@@ -94,7 +111,6 @@ function setButtonLoading(button, loading, loadingText = "Please wait...") {
   }
 }
 
-
 function formatDate(value) {
   if (!value) return "Not available";
 
@@ -106,9 +122,7 @@ function formatDate(value) {
     date = new Date(value);
   }
 
-  if (Number.isNaN(date.getTime())) {
-    return "Not available";
-  }
+  if (Number.isNaN(date.getTime())) return "Not available";
 
   return date.toLocaleDateString("en-GB", {
     day: "2-digit",
@@ -116,7 +130,6 @@ function formatDate(value) {
     year: "numeric"
   });
 }
-
 
 function getTimestamp(value) {
   if (!value) return 0;
@@ -134,7 +147,6 @@ function getTimestamp(value) {
   return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
-
 function formatStatus(status) {
   const labels = {
     pending: "Pending",
@@ -147,7 +159,6 @@ function formatStatus(status) {
   return labels[status] || status || "Unknown";
 }
 
-
 function statusClass(status) {
   const classes = {
     pending: "pending",
@@ -159,7 +170,6 @@ function statusClass(status) {
 
   return classes[status] || "pending";
 }
-
 
 function getItemIcon(category) {
   const icons = {
@@ -181,7 +191,6 @@ function getItemIcon(category) {
   return icons[String(category || "").toLowerCase()] || "📦";
 }
 
-
 function createChatLink(requestId) {
   return `
     <a class="btn btn-secondary"
@@ -190,7 +199,6 @@ function createChatLink(requestId) {
     </a>
   `;
 }
-
 
 function showEmptyMessage(element, message) {
   if (!element) return;
@@ -204,13 +212,84 @@ function showEmptyMessage(element, message) {
 
 
 /* =========================================
-   4. DASHBOARD NAVIGATION
+   4. IMAGE HELPER FUNCTIONS
+========================================= */
+
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp"
+];
+
+function validateImage(file) {
+  if (!file) {
+    throw new Error("Please choose an image.");
+  }
+
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error("Only JPG, PNG and WEBP images are allowed.");
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error("Image size must be less than 2 MB.");
+  }
+}
+
+function createSafeFileName(file) {
+  const extension = file.name.split(".").pop().toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+  return `${Date.now()}_${crypto.randomUUID()}.${extension || "jpg"}`;
+}
+
+async function uploadImage(file, folder) {
+  validateImage(file);
+
+  if (!currentUser) {
+    throw new Error("Please log in first.");
+  }
+
+  const fileName = createSafeFileName(file);
+  const imagePath = `${folder}/${currentUser.uid}/${fileName}`;
+
+  const imageRef = storageRef(storage, imagePath);
+
+  await uploadBytes(imageRef, file, {
+    contentType: file.type
+  });
+
+  const imageUrl = await getDownloadURL(imageRef);
+
+  return {
+    imageUrl,
+    imagePath
+  };
+}
+
+async function deleteStoredImage(imagePath) {
+  if (!imagePath) return;
+
+  try {
+    const imageRef = storageRef(storage, imagePath);
+    await deleteObject(imageRef);
+  } catch (error) {
+    // Ignore missing old images; do not interrupt the main operation.
+    if (error.code !== "storage/object-not-found") {
+      console.warn("Old image could not be deleted:", error);
+    }
+  }
+}
+
+
+/* =========================================
+   5. DASHBOARD NAVIGATION
 ========================================= */
 
 const navigationLinks = document.querySelectorAll("[data-section]");
 const pageSections = document.querySelectorAll(".page-section");
 const pageTitle = document.getElementById("pageTitle");
-
 
 function openDashboardSection(sectionId, clickedLink = null) {
   const targetSection = document.getElementById(sectionId);
@@ -225,18 +304,21 @@ function openDashboardSection(sectionId, clickedLink = null) {
 
   navigationLinks.forEach((link) => {
     link.classList.remove("active");
+    link.classList.remove("selected");
   });
 
   if (clickedLink) {
     clickedLink.classList.add("active");
+    clickedLink.classList.add("selected");
   } else {
-    const matchingLink = document.querySelector(
+    const matchingLinks = document.querySelectorAll(
       `[data-section="${sectionId}"]`
     );
 
-    if (matchingLink) {
-      matchingLink.classList.add("active");
-    }
+    matchingLinks.forEach((link) => {
+      link.classList.add("active");
+      link.classList.add("selected");
+    });
   }
 
   const title = targetSection.dataset.title;
@@ -252,7 +334,6 @@ function openDashboardSection(sectionId, clickedLink = null) {
   });
 }
 
-
 navigationLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
     const sectionId = link.dataset.section;
@@ -266,7 +347,31 @@ navigationLinks.forEach((link) => {
 
 
 /* =========================================
-   5. LOAD USER PROFILE
+   6. PROFILE IMAGE DISPLAY
+========================================= */
+
+function displayProfileImage(imageUrl) {
+  const avatar = document.getElementById("profile-avatar");
+  const image = document.getElementById("profile-avatar-image");
+  const initial = document.getElementById("profile-avatar-initial");
+
+  if (!avatar || !image || !initial) return;
+
+  if (imageUrl) {
+    image.src = imageUrl;
+    image.hidden = false;
+    initial.hidden = true;
+  } else {
+    image.removeAttribute("src");
+    image.hidden = true;
+    initial.hidden = false;
+    initial.textContent = currentUserName.charAt(0).toUpperCase();
+  }
+}
+
+
+/* =========================================
+   7. LOAD USER PROFILE
 ========================================= */
 
 async function loadUserProfile() {
@@ -287,7 +392,6 @@ async function loadUserProfile() {
     currentUser.email?.split("@")[0] ||
     "Student";
 
-  // Existing dashboard name fields
   const userName = document.getElementById("userName");
   const welcomeName = document.getElementById("welcomeName");
   const sidebarName = document.getElementById("sidebar-name");
@@ -296,7 +400,6 @@ async function loadUserProfile() {
   if (welcomeName) welcomeName.textContent = currentUserName;
   if (sidebarName) sidebarName.textContent = currentUserName;
 
-  // Profile fields
   setProfileField("full-name", profile.displayName || currentUserName);
   setProfileField("student-id", profile.studentId || "");
   setProfileField("email", profile.email || currentUser.email || "");
@@ -314,25 +417,85 @@ async function loadUserProfile() {
       : "Not Verified";
   }
 
-  const avatar = document.getElementById("profile-avatar");
-
-  if (avatar) {
-    avatar.textContent = currentUserName.charAt(0).toUpperCase();
-  }
+  displayProfileImage(profile.profileImageUrl || "");
 }
-
 
 function setProfileField(id, value) {
   const field = document.getElementById(id);
 
-  if (field) {
-    field.value = value;
-  }
+  if (field) field.value = value;
 }
 
 
 /* =========================================
-   6. PROFILE EDITING
+   8. PROFILE IMAGE UPLOAD
+========================================= */
+
+if (profileImageInput) {
+  profileImageInput.addEventListener("change", async () => {
+    const file = profileImageInput.files?.[0];
+
+    if (!file || !currentUser) return;
+
+    try {
+      validateImage(file);
+
+      if (profileImageMessage) {
+        profileImageMessage.textContent = "Uploading photo...";
+        profileImageMessage.className = "image-upload-message";
+      }
+
+      profileImageInput.disabled = true;
+
+      const oldImagePath = currentProfile.profileImagePath || "";
+
+      const uploaded = await uploadImage(file, "profileImages");
+
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+          profileImageUrl: uploaded.imageUrl,
+          profileImagePath: uploaded.imagePath,
+          updatedAt: serverTimestamp()
+        });
+      } catch (error) {
+        await deleteStoredImage(uploaded.imagePath);
+        throw error;
+      }
+
+      currentProfile.profileImageUrl = uploaded.imageUrl;
+      currentProfile.profileImagePath = uploaded.imagePath;
+
+      displayProfileImage(uploaded.imageUrl);
+
+      // Delete previous photo only after the new photo is saved.
+      if (oldImagePath && oldImagePath !== uploaded.imagePath) {
+        await deleteStoredImage(oldImagePath);
+      }
+
+      if (profileImageMessage) {
+        profileImageMessage.textContent = "Profile photo updated successfully.";
+        profileImageMessage.className = "image-upload-message success";
+      }
+
+    } catch (error) {
+      console.error("Profile image upload error:", error);
+
+      if (profileImageMessage) {
+        profileImageMessage.textContent =
+          error.message || "Unable to upload profile photo.";
+        profileImageMessage.className = "image-upload-message error";
+      }
+
+    } finally {
+      profileImageInput.disabled = false;
+      profileImageInput.value = "";
+    }
+  });
+}
+
+
+/* =========================================
+   9. PROFILE EDITING
 ========================================= */
 
 const profileForm = document.getElementById("profile-form");
@@ -340,7 +503,6 @@ const editProfileButton = document.getElementById("edit-profile-button");
 const cancelEditButton = document.getElementById("cancel-edit-button");
 const formActions = document.getElementById("form-actions");
 const profileMessage = document.getElementById("profile-message");
-
 
 function setProfileEditing(enabled) {
   const editableFields = [
@@ -355,43 +517,33 @@ function setProfileEditing(enabled) {
   editableFields.forEach((id) => {
     const field = document.getElementById(id);
 
-    if (field) {
-      field.disabled = !enabled;
-    }
+    if (field) field.disabled = !enabled;
   });
 
   if (editProfileButton) {
-    editProfileButton.style.display = enabled ? "none" : "inline-block";
+    editProfileButton.style.display = enabled ? "none" : "inline-flex";
   }
 
   if (formActions) {
-    formActions.style.display = enabled ? "flex" : "none";
+    formActions.hidden = !enabled;
   }
 }
 
-
 if (editProfileButton) {
   editProfileButton.addEventListener("click", () => {
-    if (profileMessage) {
-      profileMessage.textContent = "";
-    }
-
+    if (profileMessage) profileMessage.textContent = "";
     setProfileEditing(true);
   });
 }
-
 
 if (cancelEditButton) {
   cancelEditButton.addEventListener("click", async () => {
     await loadUserProfile();
     setProfileEditing(false);
 
-    if (profileMessage) {
-      profileMessage.textContent = "";
-    }
+    if (profileMessage) profileMessage.textContent = "";
   });
 }
-
 
 if (profileForm) {
   profileForm.addEventListener("submit", async (event) => {
@@ -411,9 +563,7 @@ if (profileForm) {
       return;
     }
 
-    const saveButton = profileForm.querySelector(
-      'button[type="submit"]'
-    );
+    const saveButton = profileForm.querySelector('button[type="submit"]');
 
     setButtonLoading(saveButton, true, "Saving...");
 
@@ -437,7 +587,6 @@ if (profileForm) {
       currentUserName = fullName;
 
       await loadUserProfile();
-
       setProfileEditing(false);
 
       showMessage(
@@ -463,7 +612,7 @@ if (profileForm) {
 
 
 /* =========================================
-   7. LOAD BORROW REQUESTS RECEIVED
+   10. LOAD BORROW REQUESTS RECEIVED
 ========================================= */
 
 async function loadReceivedRequests() {
@@ -478,10 +627,7 @@ async function loadReceivedRequests() {
     const snapshot = await getDocs(requestsQuery);
 
     if (snapshot.empty) {
-      showEmptyMessage(
-        requestsList,
-        "You have not received any borrow requests yet."
-      );
+      showEmptyMessage(requestsList, "You have not received any borrow requests yet.");
       return;
     }
 
@@ -501,27 +647,17 @@ async function loadReceivedRequests() {
 
       if (status === "pending") {
         actionButtons = `
-          <button class="btn btn-primary"
-                  data-action="accept"
-                  data-request-id="${escapeHTML(request.id)}">
-            Accept
-          </button>
-
-          <button class="btn btn-danger"
-                  data-action="reject"
-                  data-request-id="${escapeHTML(request.id)}">
-            Reject
-          </button>
+          <button class="btn btn-primary" data-action="accept"
+                  data-request-id="${escapeHTML(request.id)}">Accept</button>
+          <button class="btn btn-danger" data-action="reject"
+                  data-request-id="${escapeHTML(request.id)}">Reject</button>
         `;
       }
 
       if (status === "return_requested") {
         actionButtons = `
-          <button class="btn btn-primary"
-                  data-action="confirm-return"
-                  data-request-id="${escapeHTML(request.id)}">
-            Confirm Return
-          </button>
+          <button class="btn btn-primary" data-action="confirm-return"
+                  data-request-id="${escapeHTML(request.id)}">Confirm Return</button>
         `;
       }
 
@@ -529,32 +665,14 @@ async function loadReceivedRequests() {
         <div class="request-card">
           <div class="request-card-header">
             <h3>${escapeHTML(request.itemName || "Resource")}</h3>
-
             <span class="status-badge ${statusClass(status)}">
               ${escapeHTML(formatStatus(status))}
             </span>
           </div>
-
-          <p>
-            <strong>Borrower:</strong>
-            ${escapeHTML(request.borrowerName || "Student")}
-          </p>
-
-          <p>
-            <strong>Start Date:</strong>
-            ${formatDate(request.startDate)}
-          </p>
-
-          <p>
-            <strong>End Date:</strong>
-            ${formatDate(request.endDate)}
-          </p>
-
-          <p>
-            <strong>Requested On:</strong>
-            ${formatDate(request.createdAt)}
-          </p>
-
+          <p><strong>Borrower:</strong> ${escapeHTML(request.borrowerName || "Student")}</p>
+          <p><strong>Start Date:</strong> ${formatDate(request.startDate)}</p>
+          <p><strong>End Date:</strong> ${formatDate(request.endDate)}</p>
+          <p><strong>Requested On:</strong> ${formatDate(request.createdAt)}</p>
           <div class="card-actions">
             ${createChatLink(request.id)}
             ${actionButtons}
@@ -565,17 +683,13 @@ async function loadReceivedRequests() {
 
   } catch (error) {
     console.error("Received requests error:", error);
-
-    showEmptyMessage(
-      requestsList,
-      "Unable to load received requests."
-    );
+    showEmptyMessage(requestsList, "Unable to load received requests.");
   }
 }
 
 
 /* =========================================
-   8. ACCEPT / REJECT BORROW REQUEST
+   11. ACCEPT / REJECT BORROW REQUEST
 ========================================= */
 
 async function updateBorrowRequest(requestId, action) {
@@ -613,12 +727,32 @@ async function updateBorrowRequest(requestId, action) {
         throw new Error("You do not own this resource.");
       }
 
+      if (item.isArchived === true) {
+        throw new Error("This resource has been archived.");
+      }
+
       if (action === "accept") {
-        if (
-          item.available === false ||
-          (item.activeRequestId && item.activeRequestId !== requestId)
-        ) {
-          throw new Error("This resource is no longer available.");
+        if (item.activeRequestId && item.activeRequestId !== requestId) {
+          const activeRequestRef = doc(
+            db,
+            "borrowRequests",
+            item.activeRequestId
+          );
+
+          const activeRequestSnapshot = await transaction.get(activeRequestRef);
+
+          if (activeRequestSnapshot.exists()) {
+            const activeRequest = activeRequestSnapshot.data();
+
+            if (
+              activeRequest.status === "approved" ||
+              activeRequest.status === "return_requested"
+            ) {
+              throw new Error(
+                "This resource is already borrowed by another student."
+              );
+            }
+          }
         }
 
         transaction.update(requestRef, {
@@ -638,19 +772,14 @@ async function updateBorrowRequest(requestId, action) {
           updatedAt: serverTimestamp()
         });
 
-        transaction.update(itemRef, {
-          available: true,
-          activeRequestId: null,
-          updatedAt: serverTimestamp()
-        });
+      } else {
+        throw new Error("Invalid request action.");
       }
     });
 
-    alert(
-      action === "accept"
-        ? "Borrow request accepted."
-        : "Borrow request rejected."
-    );
+    alert(action === "accept"
+      ? "Borrow request accepted."
+      : "Borrow request rejected.");
 
     await refreshDashboard();
 
@@ -662,7 +791,7 @@ async function updateBorrowRequest(requestId, action) {
 
 
 /* =========================================
-   9. LOAD MY LISTED RESOURCES
+   12. LOAD MY LISTED RESOURCES
 ========================================= */
 
 async function loadMyItems() {
@@ -676,18 +805,17 @@ async function loadMyItems() {
 
     const snapshot = await getDocs(itemsQuery);
 
-    if (snapshot.empty) {
-      showEmptyMessage(
-        itemsList,
-        "You have not listed any resources yet."
-      );
+    const items = snapshot.docs
+      .map((document) => ({
+        id: document.id,
+        ...document.data()
+      }))
+      .filter((item) => item.isArchived !== true);
+
+    if (items.length === 0) {
+      showEmptyMessage(itemsList, "You have not listed any active resources yet.");
       return;
     }
-
-    const items = snapshot.docs.map((document) => ({
-      id: document.id,
-      ...document.data()
-    }));
 
     items.sort(
       (a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt)
@@ -696,29 +824,27 @@ async function loadMyItems() {
     itemsList.innerHTML = items.map((item) => {
       const available = item.available !== false;
 
+      const imageHTML = item.imageUrl
+        ? `<img class="item-card-image"
+                src="${escapeHTML(item.imageUrl)}"
+                alt="${escapeHTML(item.name || "Resource")}"
+                loading="lazy">`
+        : `<div class="item-image-placeholder">${getItemIcon(item.category)}</div>`;
+
       return `
         <div class="item-card">
-          <div class="item-card-header">
-            <span class="item-icon">
-              ${getItemIcon(item.category)}
-            </span>
+          ${imageHTML}
 
+          <div class="item-card-header">
+            <span class="item-icon">${getItemIcon(item.category)}</span>
             <span class="status-badge ${available ? "approved" : "pending"}">
               ${available ? "Available" : "Borrowed"}
             </span>
           </div>
 
           <h3>${escapeHTML(item.name || "Untitled Resource")}</h3>
-
-          <p>
-            <strong>Category:</strong>
-            ${escapeHTML(item.category || "Other")}
-          </p>
-
-          <p>
-            <strong>Location:</strong>
-            ${escapeHTML(item.location || "Not specified")}
-          </p>
+          <p><strong>Category:</strong> ${escapeHTML(item.category || "Other")}</p>
+          <p><strong>Location:</strong> ${escapeHTML(item.location || "Not specified")}</p>
 
           <div class="card-actions">
             <a class="btn btn-secondary"
@@ -729,7 +855,7 @@ async function loadMyItems() {
             <button class="btn btn-danger"
                     data-action="delete-item"
                     data-item-id="${escapeHTML(item.id)}">
-              Delete Resource
+              Remove Resource
             </button>
           </div>
         </div>
@@ -738,100 +864,131 @@ async function loadMyItems() {
 
   } catch (error) {
     console.error("My items error:", error);
-
-    showEmptyMessage(
-      itemsList,
-      "Unable to load your listed resources."
-    );
+    showEmptyMessage(itemsList, "Unable to load your listed resources.");
   }
 }
 
 
 /* =========================================
-   10. DELETE MY RESOURCE
+   13. ARCHIVE / REMOVE MY RESOURCE
 ========================================= */
 
 async function deleteMyItem(itemId) {
   if (!currentUser || !itemId) return;
 
   const confirmed = confirm(
-    "Are you sure you want to delete this resource?"
+    "Remove this resource from your active listings?\n\n" +
+    "If someone has borrowed it, the borrowing record will be kept " +
+    "until the return is completed."
   );
 
   if (!confirmed) return;
 
   try {
     const itemRef = doc(db, "items", itemId);
-    const itemSnapshot = await getDoc(itemRef);
+    const initialItemSnapshot = await getDoc(itemRef);
 
-    if (!itemSnapshot.exists()) {
-      alert("This resource does not exist.");
-      return;
+    if (!initialItemSnapshot.exists()) {
+      throw new Error("Resource not found.");
     }
 
-    const item = itemSnapshot.data();
+    const initialItem = initialItemSnapshot.data();
 
-    if (item.ownerId !== currentUser.uid) {
-      alert("You are not allowed to delete this resource.");
-      return;
+    if (initialItem.ownerId !== currentUser.uid) {
+      throw new Error("You are not allowed to remove this resource.");
     }
 
-    // Do not delete a resource that is currently borrowed.
-    if (
-      item.available === false ||
-      item.activeRequestId
-    ) {
-      alert(
-        "This resource cannot be deleted while it is borrowed or has an active request."
-      );
-      return;
+    if (initialItem.isArchived === true) {
+      throw new Error("This resource has already been removed.");
     }
 
-    // Check for pending or active requests linked to this resource.
     const requestsQuery = query(
       collection(db, "borrowRequests"),
       where("itemId", "==", itemId),
-where("ownerId", "==", currentUser.uid)
+      where("ownerId", "==", currentUser.uid)
     );
 
     const requestsSnapshot = await getDocs(requestsQuery);
 
-    const hasActiveRequest = requestsSnapshot.docs.some((document) => {
-      const status = document.data().status;
+    const requestRefs = requestsSnapshot.docs.map((document) =>
+      doc(db, "borrowRequests", document.id)
+    );
 
-      return [
-        "pending",
-        "approved",
-        "return_requested"
-      ].includes(status);
+    await runTransaction(db, async (transaction) => {
+      const itemSnapshot = await transaction.get(itemRef);
+
+      if (!itemSnapshot.exists()) {
+        throw new Error("Resource not found.");
+      }
+
+      const item = itemSnapshot.data();
+
+      if (item.ownerId !== currentUser.uid) {
+        throw new Error("You are not allowed to remove this resource.");
+      }
+
+      if (item.isArchived === true) {
+        throw new Error("This resource has already been removed.");
+      }
+
+      const requestSnapshots = [];
+
+      for (const requestRef of requestRefs) {
+        const requestSnapshot = await transaction.get(requestRef);
+
+        if (requestSnapshot.exists()) {
+          requestSnapshots.push({
+            ref: requestRef,
+            data: requestSnapshot.data()
+          });
+        }
+      }
+
+      const activeRequests = requestSnapshots.filter(({ data }) => {
+        return data.status === "approved" ||
+          data.status === "return_requested";
+      });
+
+      if (activeRequests.length > 1) {
+        throw new Error(
+          "Multiple active borrowings were found. Please check the requests first."
+        );
+      }
+
+      requestSnapshots.forEach(({ ref, data }) => {
+        if (data.status === "pending") {
+          transaction.update(ref, {
+            status: "rejected",
+            updatedAt: serverTimestamp()
+          });
+        }
+      });
+
+      const activeRequestId = activeRequests.length === 1
+        ? activeRequests[0].ref.id
+        : null;
+
+      transaction.update(itemRef, {
+        isArchived: true,
+        archivedAt: serverTimestamp(),
+        available: false,
+        activeRequestId,
+        updatedAt: serverTimestamp()
+      });
     });
 
-    if (hasActiveRequest) {
-      alert(
-        "This resource has an active borrow request. You cannot delete it now."
-      );
-      return;
-    }
-
-    await deleteDoc(itemRef);
-
-    alert("Resource deleted successfully.");
-
+    alert("Resource removed from your active listings successfully.");
     await refreshDashboard();
 
   } catch (error) {
-    console.error("Delete resource error:", error);
-
-    alert(
-      error.message ||
-      "Unable to delete this resource. Please try again."
-    );
+    console.error("Remove resource error:", error);
+    alert(error.message || "Unable to remove this resource.");
   }
 }
 
 
 /* =========================================
-   11. LOAD MY BORROW REQUESTS
+   14. LOAD MY BORROW REQUESTS
 ========================================= */
 
 async function loadMyRequests() {
@@ -846,10 +1003,7 @@ async function loadMyRequests() {
     const snapshot = await getDocs(requestsQuery);
 
     if (snapshot.empty) {
-      showEmptyMessage(
-        myRequestsList,
-        "You have not made any borrow requests yet."
-      );
+      showEmptyMessage(myRequestsList, "You have not made any borrow requests yet.");
       return;
     }
 
@@ -869,47 +1023,29 @@ async function loadMyRequests() {
         <div class="request-card">
           <div class="request-card-header">
             <h3>${escapeHTML(request.itemName || "Resource")}</h3>
-
             <span class="status-badge ${statusClass(status)}">
               ${escapeHTML(formatStatus(status))}
             </span>
           </div>
 
-          <p>
-            <strong>Owner:</strong>
-            ${escapeHTML(request.ownerName || "Student")}
-          </p>
+          <p><strong>Owner:</strong> ${escapeHTML(request.ownerName || "Student")}</p>
+          <p><strong>Start Date:</strong> ${formatDate(request.startDate)}</p>
+          <p><strong>End Date:</strong> ${formatDate(request.endDate)}</p>
 
-          <p>
-            <strong>Start Date:</strong>
-            ${formatDate(request.startDate)}
-          </p>
-
-          <p>
-            <strong>End Date:</strong>
-            ${formatDate(request.endDate)}
-          </p>
-
-          <div class="card-actions">
-            ${createChatLink(request.id)}
-          </div>
+          <div class="card-actions">${createChatLink(request.id)}</div>
         </div>
       `;
     }).join("");
 
   } catch (error) {
     console.error("My requests error:", error);
-
-    showEmptyMessage(
-      myRequestsList,
-      "Unable to load your borrow requests."
-    );
+    showEmptyMessage(myRequestsList, "Unable to load your borrow requests.");
   }
 }
 
 
 /* =========================================
-   12. LOAD MY CURRENT BORROWINGS
+   15. LOAD MY CURRENT BORROWINGS
 ========================================= */
 
 async function loadMyBorrowings() {
@@ -929,60 +1065,38 @@ async function loadMyBorrowings() {
         ...document.data()
       }))
       .filter((request) => {
-        return [
-          "approved",
-          "return_requested"
-        ].includes(request.status);
+        return ["approved", "return_requested"].includes(request.status);
       });
 
     if (borrowings.length === 0) {
-      showEmptyMessage(
-        myBorrowingsList,
-        "You do not have any active borrowings."
-      );
+      showEmptyMessage(myBorrowingsList, "You do not have any active borrowings.");
       return;
     }
 
     myBorrowingsList.innerHTML = borrowings.map((request) => {
       const status = request.status;
 
-      let returnButton = "";
-
-      if (status === "approved") {
-        returnButton = `
-          <button class="btn btn-primary"
-                  data-action="request-return"
-                  data-request-id="${escapeHTML(request.id)}">
-            Request Return
-          </button>
-        `;
-      } else {
-        returnButton = `
-          <span class="status-badge pending">
-            Waiting for owner confirmation
-          </span>
-        `;
-      }
+      const returnButton = status === "approved"
+        ? `<button class="btn btn-primary"
+                   data-action="request-return"
+                   data-request-id="${escapeHTML(request.id)}">
+             Request Return
+           </button>`
+        : `<span class="status-badge pending">
+             Waiting for owner confirmation
+           </span>`;
 
       return `
         <div class="request-card">
           <div class="request-card-header">
             <h3>${escapeHTML(request.itemName || "Resource")}</h3>
-
             <span class="status-badge ${statusClass(status)}">
               ${escapeHTML(formatStatus(status))}
             </span>
           </div>
 
-          <p>
-            <strong>Owner:</strong>
-            ${escapeHTML(request.ownerName || "Student")}
-          </p>
-
-          <p>
-            <strong>Return Date:</strong>
-            ${formatDate(request.endDate)}
-          </p>
+          <p><strong>Owner:</strong> ${escapeHTML(request.ownerName || "Student")}</p>
+          <p><strong>Return Date:</strong> ${formatDate(request.endDate)}</p>
 
           <div class="card-actions">
             ${createChatLink(request.id)}
@@ -994,17 +1108,13 @@ async function loadMyBorrowings() {
 
   } catch (error) {
     console.error("My borrowings error:", error);
-
-    showEmptyMessage(
-      myBorrowingsList,
-      "Unable to load your borrowings."
-    );
+    showEmptyMessage(myBorrowingsList, "Unable to load your borrowings.");
   }
 }
 
 
 /* =========================================
-   13. REQUEST RETURN
+   16. REQUEST RETURN
 ========================================= */
 
 async function requestReturn(requestId) {
@@ -1043,19 +1153,17 @@ async function requestReturn(requestId) {
     });
 
     alert("Return request sent to the resource owner.");
-
     await refreshDashboard();
 
   } catch (error) {
     console.error("Return request error:", error);
-
     alert(error.message || "Unable to request return.");
   }
 }
 
 
 /* =========================================
-   14. CONFIRM RETURN
+   17. CONFIRM RETURN
 ========================================= */
 
 async function confirmReturn(requestId) {
@@ -1109,26 +1217,24 @@ async function confirmReturn(requestId) {
       });
 
       transaction.update(itemRef, {
-        available: true,
+        available: item.isArchived === true ? false : true,
         activeRequestId: null,
         updatedAt: serverTimestamp()
       });
     });
 
     alert("Return confirmed successfully.");
-
     await refreshDashboard();
 
   } catch (error) {
     console.error("Confirm return error:", error);
-
     alert(error.message || "Unable to confirm return.");
   }
 }
 
 
 /* =========================================
-   15. LOAD HISTORY
+   18. LOAD HISTORY
 ========================================= */
 
 async function loadHistory() {
@@ -1167,24 +1273,17 @@ async function loadHistory() {
     });
 
     const history = Array.from(requestMap.values()).filter((request) => {
-      return [
-        "returned",
-        "rejected"
-      ].includes(request.status);
+      return ["returned", "rejected"].includes(request.status);
     });
 
     history.sort((a, b) => {
       const aDate = getTimestamp(a.updatedAt || a.createdAt);
       const bDate = getTimestamp(b.updatedAt || b.createdAt);
-
       return bDate - aDate;
     });
 
     if (history.length === 0) {
-      showEmptyMessage(
-        historyList,
-        "Your borrowing history is empty."
-      );
+      showEmptyMessage(historyList, "Your borrowing history is empty.");
       return;
     }
 
@@ -1195,22 +1294,15 @@ async function loadHistory() {
         <div class="request-card">
           <div class="request-card-header">
             <h3>${escapeHTML(request.itemName || "Resource")}</h3>
-
             <span class="status-badge ${statusClass(request.status)}">
               ${escapeHTML(formatStatus(request.status))}
             </span>
           </div>
 
-          <p>
-            <strong>Role:</strong>
-            ${isOwner ? "Resource Owner" : "Borrower"}
-          </p>
+          <p><strong>Role:</strong> ${isOwner ? "Resource Owner" : "Borrower"}</p>
 
           <p>
-            <strong>
-              ${isOwner ? "Borrower:" : "Owner:"}
-            </strong>
-
+            <strong>${isOwner ? "Borrower:" : "Owner:"}</strong>
             ${escapeHTML(
               isOwner
                 ? request.borrowerName || "Student"
@@ -1218,42 +1310,96 @@ async function loadHistory() {
             )}
           </p>
 
-          <p>
-            <strong>Completed / Updated:</strong>
+          <p><strong>Completed / Updated:</strong>
             ${formatDate(request.updatedAt || request.createdAt)}
           </p>
 
-          <div class="card-actions">
-            ${createChatLink(request.id)}
-          </div>
+          <div class="card-actions">${createChatLink(request.id)}</div>
         </div>
       `;
     }).join("");
 
   } catch (error) {
     console.error("History error:", error);
-
-    showEmptyMessage(
-      historyList,
-      "Unable to load your history."
-    );
+    showEmptyMessage(historyList, "Unable to load your history.");
   }
 }
 
 
 /* =========================================
-   16. ADD NEW RESOURCE
+   19. RESOURCE IMAGE PREVIEW
+========================================= */
+
+let selectedItemImage = null;
+let itemImagePreviewUrl = null;
+
+function clearItemImagePreview() {
+  selectedItemImage = null;
+
+  if (itemImagePreviewUrl) {
+    URL.revokeObjectURL(itemImagePreviewUrl);
+    itemImagePreviewUrl = null;
+  }
+
+  if (itemImageInput) itemImageInput.value = "";
+
+  if (itemImagePreview) {
+    itemImagePreview.removeAttribute("src");
+  }
+
+  if (itemImagePreviewContainer) {
+    itemImagePreviewContainer.hidden = true;
+  }
+}
+
+if (itemImageInput) {
+  itemImageInput.addEventListener("change", () => {
+    const file = itemImageInput.files?.[0];
+
+    if (!file) {
+      clearItemImagePreview();
+      return;
+    }
+
+    try {
+      validateImage(file);
+
+      if (itemImagePreviewUrl) {
+        URL.revokeObjectURL(itemImagePreviewUrl);
+      }
+
+      selectedItemImage = file;
+      itemImagePreviewUrl = URL.createObjectURL(file);
+
+      itemImagePreview.src = itemImagePreviewUrl;
+      itemImagePreviewContainer.hidden = false;
+
+      showMessage(itemFormMessage, "", "success");
+      itemFormMessage.textContent = "";
+
+    } catch (error) {
+      clearItemImagePreview();
+      showMessage(itemFormMessage, error.message, "error");
+    }
+  });
+}
+
+if (removeItemImageButton) {
+  removeItemImageButton.addEventListener("click", () => {
+    clearItemImagePreview();
+  });
+}
+
+
+/* =========================================
+   20. ADD NEW RESOURCE WITH IMAGE
 ========================================= */
 
 async function handleAddItem(event) {
   event.preventDefault();
 
   if (!currentUser) {
-    showMessage(
-      itemFormMessage,
-      "Please log in to add a resource.",
-      "error"
-    );
+    showMessage(itemFormMessage, "Please log in to add a resource.", "error");
     return;
   }
 
@@ -1272,23 +1418,44 @@ async function handleAddItem(event) {
   const location = document.getElementById("itemLocation")?.value.trim();
 
   if (!name || !category || !description || !location) {
-    showMessage(
-      itemFormMessage,
-      "Please complete all required fields.",
-      "error"
-    );
+    showMessage(itemFormMessage, "Please complete all required fields.", "error");
     return;
+  }
+
+  if (selectedItemImage) {
+    try {
+      validateImage(selectedItemImage);
+    } catch (error) {
+      showMessage(itemFormMessage, error.message, "error");
+      return;
+    }
   }
 
   setButtonLoading(addItemButton, true, "Adding Resource...");
 
+  let uploadedImagePath = null;
+
   try {
     await currentUser.reload();
-
     currentUser = auth.currentUser;
 
     if (!currentUser || !currentUser.emailVerified) {
       throw new Error("Please verify your email before adding a resource.");
+    }
+
+    let imageUrl = "";
+    let imagePath = "";
+
+    // Upload resource image if selected.
+    if (selectedItemImage) {
+      const uploaded = await uploadImage(
+        selectedItemImage,
+        "resourceImages"
+      );
+
+      imageUrl = uploaded.imageUrl;
+      imagePath = uploaded.imagePath;
+      uploadedImagePath = uploaded.imagePath;
     }
 
     await addDoc(collection(db, "items"), {
@@ -1296,6 +1463,9 @@ async function handleAddItem(event) {
       category,
       description,
       location,
+
+      imageUrl,
+      imagePath,
 
       condition: "Good",
       fee: 0,
@@ -1306,12 +1476,14 @@ async function handleAddItem(event) {
 
       available: true,
       activeRequestId: null,
+      isArchived: false,
 
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
 
     addItemForm.reset();
+    clearItemImagePreview();
 
     showMessage(
       itemFormMessage,
@@ -1324,6 +1496,11 @@ async function handleAddItem(event) {
   } catch (error) {
     console.error("Add resource error:", error);
 
+    // If Firestore save fails, remove the uploaded image.
+    if (uploadedImagePath) {
+      await deleteStoredImage(uploadedImagePath);
+    }
+
     showMessage(
       itemFormMessage,
       error.message || "Unable to add resource.",
@@ -1335,14 +1512,13 @@ async function handleAddItem(event) {
   }
 }
 
-
 if (addItemForm) {
   addItemForm.addEventListener("submit", handleAddItem);
 }
 
 
 /* =========================================
-   17. DASHBOARD REFRESH
+   21. DASHBOARD REFRESH
 ========================================= */
 
 async function refreshDashboard() {
@@ -1357,7 +1533,7 @@ async function refreshDashboard() {
 
 
 /* =========================================
-   18. ACTION BUTTON EVENT HANDLER
+   22. ACTION BUTTON EVENT HANDLER
 ========================================= */
 
 document.addEventListener("click", async (event) => {
@@ -1392,7 +1568,14 @@ document.addEventListener("click", async (event) => {
       case "delete-item":
         await deleteMyItem(itemId);
         break;
+
+      default:
+        console.warn("Unknown dashboard action:", action);
     }
+
+  } catch (error) {
+    console.error("Action button error:", error);
+    alert(error.message || "Unable to complete this action.");
 
   } finally {
     button.disabled = false;
@@ -1401,7 +1584,7 @@ document.addEventListener("click", async (event) => {
 
 
 /* =========================================
-   19. LOGOUT
+   23. LOGOUT
 ========================================= */
 
 if (logoutButton) {
@@ -1411,8 +1594,6 @@ if (logoutButton) {
 
     try {
       await signOut(auth);
-
-      // Replace the current history entry instead of adding a new one.
       window.location.replace("login.html");
 
     } catch (error) {
@@ -1428,11 +1609,9 @@ if (logoutButton) {
 
 
 /* =========================================
-   20. BROWSER BACK / CACHE PROTECTION
+   24. BROWSER BACK / CACHE PROTECTION
 ========================================= */
 
-// If the browser restores this page from its back-forward cache,
-// check Firebase authentication again.
 window.addEventListener("pageshow", async (event) => {
   if (!event.persisted) return;
 
@@ -1447,11 +1626,10 @@ window.addEventListener("pageshow", async (event) => {
 
 
 /* =========================================
-   21. FIREBASE AUTHENTICATION CHECK
+   25. FIREBASE AUTHENTICATION CHECK
 ========================================= */
 
 onAuthStateChanged(auth, async (user) => {
-  // Let pageshow know that the first authentication check completed.
   authReadyResolve();
 
   if (!user) {
@@ -1473,18 +1651,80 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     await loadUserProfile();
-
     await refreshDashboard();
 
   } catch (error) {
     console.error("Dashboard initialization error:", error);
 
-    alert(
-      "Unable to load your dashboard. Please log in again."
-    );
+    alert("Unable to load your dashboard. Please log in again.");
 
     await signOut(auth);
-
     window.location.replace("login.html");
   }
+});
+// =====================================
+// MOBILE HAMBURGER NAVIGATION
+// =====================================
+
+const menuToggle = document.getElementById("menuToggle");
+const sidebar = document.querySelector(".sidebar");
+const sidebarOverlay = document.getElementById("sidebarOverlay");
+
+function openSidebar() {
+
+    sidebar.classList.add("mobile-open");
+    sidebarOverlay.classList.add("active");
+
+    menuToggle.innerHTML = "✕";
+
+    menuToggle.setAttribute("aria-expanded", "true");
+    menuToggle.setAttribute("aria-label", "Close navigation menu");
+
+}
+
+function closeSidebar() {
+
+    sidebar.classList.remove("mobile-open");
+    sidebarOverlay.classList.remove("active");
+
+    menuToggle.innerHTML = "☰";
+
+    menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.setAttribute("aria-label", "Open navigation menu");
+
+}
+
+menuToggle?.addEventListener("click", () => {
+
+    if (sidebar.classList.contains("mobile-open")) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
+
+});
+
+// Close when clicking outside sidebar
+sidebarOverlay?.addEventListener("click", closeSidebar);
+
+// Close after clicking navigation links
+sidebar?.querySelectorAll("a").forEach(link => {
+
+    link.addEventListener("click", () => {
+
+        if (window.innerWidth <= 768) {
+            closeSidebar();
+        }
+
+    });
+
+});
+
+// Close when switching to desktop
+window.addEventListener("resize", () => {
+
+    if (window.innerWidth > 768) {
+        closeSidebar();
+    }
+
 });
