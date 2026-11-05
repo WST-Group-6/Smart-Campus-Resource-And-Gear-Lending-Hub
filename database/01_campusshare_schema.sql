@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS campusshare_integration_test;
-USE campusshare_integration_test;
+CREATE DATABASE IF NOT EXISTS campusshare_db;
+USE campusshare_db;
 
 CREATE TABLE IF NOT EXISTS departments (
     department_id INT AUTO_INCREMENT PRIMARY KEY,

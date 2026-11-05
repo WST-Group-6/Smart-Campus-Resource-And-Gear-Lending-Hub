@@ -18,14 +18,13 @@ The CampusShare database contains 14 tables.
 - `items`
 - `item_images`
 
-**Lending tables:**
-- `borrow_requests`
-- `loans`
-- `condition_records`
-- `ratings`
-- `notifications`
-- `reported_issues`
-- `activity_logs`
+### Initialize the complete database
+
+Run [`01_campusshare_schema.sql`](./01_campusshare_schema.sql) in MySQL to create the `campusshare_db` database and all application tables, including users, items, and lending operations. Use a MySQL version that enforces `CHECK` constraints (8.0.16 or later).
+
+The other SQL files in this folder are supporting scripts for the earlier Member 2 lending-table schema. Do not run `02_lending_tables.sql` as the application schema when using the complete schema; it defines a different version of several lending tables.
+
+## 2. Member 2 Database Tables
 
 The backend must use the exact column names defined in `01_campusshare_schema.sql`.
 
@@ -199,52 +198,8 @@ Record important actions such as request submission, approval, rejection, cancel
 
 ## 4. Backend Validation Requirements
 
-The Spring Boot backend must enforce:
-
-1. Authentication and role-based authorization.
-2. Item-owner-only request approval and rejection.
-3. Valid borrowing and approved date ranges.
-4. Prevention of overlapping approved reservations and active loans.
-5. Pending-only request cancellation.
-6. Approved-request-only loan creation after handover confirmation.
-7. Completed-loan-only ratings.
-8. Valid rating participants and targets.
-9. Proper return confirmation.
-10. Transaction handling to prevent concurrent approvals from reserving the same item.
-
-**Important:** Database foreign keys and CHECK constraints do not enforce all these business rules. They must also be implemented in the backend.
-
-## 5. Database Testing
-
-The following scripts have been tested using `campusshare_integration_test`:
-
-- `03_verify_lending_tables.sql` — Table and relationship verification.
-- `04_test_lending_constraints.sql` — Database constraint testing.
-- `05_test_borrowing_workflow.sql` — Complete borrowing workflow simulation.
-- `06_test_request_scenarios.sql` — Cancellation, rejection, and overlapping-date detection.
-
-These tests passed for the scenarios covered. They do not replace backend API, authorization, or concurrency tests.
-
-## 6. Important Integration Notes
-
-- Use `01_campusshare_schema.sql` as the shared database schema.
-- Do not execute the old `02_lending_tables.sql`, because it defines incompatible versions of the lending tables.
-- Do not use `campusshare_integration_test` as the production database.
-- Agree on the final schema before the backend team creates Java entities and repositories.
-- Apply future schema changes through reviewed migration scripts.
-- Use transactions for approval, loan creation, and return operations.
-- Do not rely on frontend validation alone.
-
-## 7. Remaining Improvements
-
-Before final deployment, the team should review:
-
-- Date-range constraints.
-- Duplicate ratings and rating-target validation.
-- Condition-dispute handling.
-- Overlapping reservation enforcement.
-- Request and loan status-transition rules.
-- Appropriate foreign-key deletion behavior to preserve borrowing history.
-- Missing business-rule constraints that require backend implementation.
-
-**Database team status:** The shared
+- `database/02_lending_tables.sql`
+- `database/03_verify_lending_tables.sql`
+- `database/04_test_lending_constraints.sql`
+- `database/05_test_borrowing_workflow.sql`
+- `database/06_test_request_scenarios.sql`
