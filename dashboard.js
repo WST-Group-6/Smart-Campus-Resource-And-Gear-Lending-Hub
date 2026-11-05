@@ -1,0 +1,1730 @@
+
+import { auth, db } from "./firebase-config.js";
+
+import {
+  onAuthStateChanged,
+  signOut,
+  updateProfile
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  runTransaction,
+  serverTimestamp,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-storage.js";
+
+
+/* =========================================
+   1. GLOBAL VARIABLES
+========================================= */
+
+let currentUser = null;
+let currentUserName = "Student";
+let currentProfile = {};
+
+let authReadyResolve;
+
+const authStateReady = new Promise((resolve) => {
+  authReadyResolve = resolve;
+});
+
+const storage = getStorage();
+
+
+/* =========================================
+   2. DOM ELEMENTS
+========================================= */
+
+const logoutButton = document.getElementById("logoutButton");
+
+const addItemForm = document.getElementById("addItemForm");
+const itemFormMessage = document.getElementById("itemFormMessage");
+const addItemButton = document.getElementById("addItemButton");
+
+const requestsList = document.getElementById("requestsList");
+const itemsList = document.getElementById("itemsList");
+const myRequestsList = document.getElementById("myRequestsList");
+const myBorrowingsList = document.getElementById("myBorrowingsList");
+const historyList = document.getElementById("historyList");
+
+const itemImageInput = document.getElementById("itemImage");
+const itemImagePreview = document.getElementById("itemImagePreview");
+const itemImagePreviewContainer =
+  document.getElementById("itemImagePreviewContainer");
+const removeItemImageButton = document.getElementById("removeItemImage");
+
+const profileImageInput = document.getElementById("profileImageInput");
+const profileImageMessage =
+  document.getElementById("profileImageMessage");
+
+
+/* =========================================
+   3. GENERAL HELPER FUNCTIONS
+========================================= */
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => {
+    const characters = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;"
+    };
+
+    return characters[character];
+  });
+}
+
+function showMessage(element, message, type = "success") {
+  if (!element) return;
+
+  element.textContent = message;
+  element.className = `message ${type}`;
+}
+
+function setButtonLoading(button, loading, loadingText = "Please wait...") {
+  if (!button) return;
+
+  if (loading) {
+    button.dataset.originalText = button.textContent;
+    button.textContent = loadingText;
+    button.disabled = true;
+  } else {
+    button.textContent = button.dataset.originalText || button.textContent;
+    button.disabled = false;
+  }
+}
+
+function formatDate(value) {
+  if (!value) return "Not available";
+
+  let date;
+
+  if (typeof value.toDate === "function") {
+    date = value.toDate();
+  } else {
+    date = new Date(value);
+  }
+
+  if (Number.isNaN(date.getTime())) return "Not available";
+
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function getTimestamp(value) {
+  if (!value) return 0;
+
+  if (typeof value.toMillis === "function") {
+    return value.toMillis();
+  }
+
+  if (typeof value.toDate === "function") {
+    return value.toDate().getTime();
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+function formatStatus(status) {
+  const labels = {
+    pending: "Pending",
+    approved: "Approved",
+    rejected: "Rejected",
+    returned: "Returned",
+    return_requested: "Return Requested"
+  };
+
+  return labels[status] || status || "Unknown";
+}
+
+function statusClass(status) {
+  const classes = {
+    pending: "pending",
+    approved: "approved",
+    rejected: "rejected",
+    returned: "returned",
+    return_requested: "pending"
+  };
+
+  return classes[status] || "pending";
+}
+
+function getItemIcon(category) {
+  const icons = {
+    textbooks: "📚",
+    books: "📚",
+    calculators: "🧮",
+    laptops: "💻",
+    electronics: "💻",
+    cameras: "📷",
+    photography: "📷",
+    sports: "⚽",
+    "sports equipment": "⚽",
+    accessories: "🎒",
+    tools: "🛠️",
+    stationery: "✏️",
+    other: "📦"
+  };
+
+  return icons[String(category || "").toLowerCase()] || "📦";
+}
+
+function createChatLink(requestId) {
+  return `
+    <a class="btn btn-secondary"
+       href="chat.html?requestId=${encodeURIComponent(requestId)}">
+       Open Chat
+    </a>
+  `;
+}
+
+function showEmptyMessage(element, message) {
+  if (!element) return;
+
+  element.innerHTML = `
+    <div class="empty-state">
+      <p>${escapeHTML(message)}</p>
+    </div>
+  `;
+}
+
+
+/* =========================================
+   4. IMAGE HELPER FUNCTIONS
+========================================= */
+
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp"
+];
+
+function validateImage(file) {
+  if (!file) {
+    throw new Error("Please choose an image.");
+  }
+
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    throw new Error("Only JPG, PNG and WEBP images are allowed.");
+  }
+
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error("Image size must be less than 2 MB.");
+  }
+}
+
+function createSafeFileName(file) {
+  const extension = file.name.split(".").pop().toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+  return `${Date.now()}_${crypto.randomUUID()}.${extension || "jpg"}`;
+}
+
+async function uploadImage(file, folder) {
+  validateImage(file);
+
+  if (!currentUser) {
+    throw new Error("Please log in first.");
+  }
+
+  const fileName = createSafeFileName(file);
+  const imagePath = `${folder}/${currentUser.uid}/${fileName}`;
+
+  const imageRef = storageRef(storage, imagePath);
+
+  await uploadBytes(imageRef, file, {
+    contentType: file.type
+  });
+
+  const imageUrl = await getDownloadURL(imageRef);
+
+  return {
+    imageUrl,
+    imagePath
+  };
+}
+
+async function deleteStoredImage(imagePath) {
+  if (!imagePath) return;
+
+  try {
+    const imageRef = storageRef(storage, imagePath);
+    await deleteObject(imageRef);
+  } catch (error) {
+    // Ignore missing old images; do not interrupt the main operation.
+    if (error.code !== "storage/object-not-found") {
+      console.warn("Old image could not be deleted:", error);
+    }
+  }
+}
+
+
+/* =========================================
+   5. DASHBOARD NAVIGATION
+========================================= */
+
+const navigationLinks = document.querySelectorAll("[data-section]");
+const pageSections = document.querySelectorAll(".page-section");
+const pageTitle = document.getElementById("pageTitle");
+
+function openDashboardSection(sectionId, clickedLink = null) {
+  const targetSection = document.getElementById(sectionId);
+
+  if (!targetSection) return;
+
+  pageSections.forEach((section) => {
+    section.classList.remove("active");
+  });
+
+  targetSection.classList.add("active");
+
+  navigationLinks.forEach((link) => {
+    link.classList.remove("active");
+    link.classList.remove("selected");
+  });
+
+  if (clickedLink) {
+    clickedLink.classList.add("active");
+    clickedLink.classList.add("selected");
+  } else {
+    const matchingLinks = document.querySelectorAll(
+      `[data-section="${sectionId}"]`
+    );
+
+    matchingLinks.forEach((link) => {
+      link.classList.add("active");
+      link.classList.add("selected");
+    });
+  }
+
+  const title = targetSection.dataset.title;
+
+  if (pageTitle) {
+    pageTitle.textContent =
+      title || targetSection.querySelector("h2")?.textContent || "Dashboard";
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
+navigationLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    const sectionId = link.dataset.section;
+
+    if (!sectionId) return;
+
+    event.preventDefault();
+    openDashboardSection(sectionId, link);
+  });
+});
+
+
+/* =========================================
+   6. PROFILE IMAGE DISPLAY
+========================================= */
+
+function displayProfileImage(imageUrl) {
+  const avatar = document.getElementById("profile-avatar");
+  const image = document.getElementById("profile-avatar-image");
+  const initial = document.getElementById("profile-avatar-initial");
+
+  if (!avatar || !image || !initial) return;
+
+  if (imageUrl) {
+    image.src = imageUrl;
+    image.hidden = false;
+    initial.hidden = true;
+  } else {
+    image.removeAttribute("src");
+    image.hidden = true;
+    initial.hidden = false;
+    initial.textContent = currentUserName.charAt(0).toUpperCase();
+  }
+}
+
+
+/* =========================================
+   7. LOAD USER PROFILE
+========================================= */
+
+async function loadUserProfile() {
+  if (!currentUser) return;
+
+  const userRef = doc(db, "users", currentUser.uid);
+  const userSnapshot = await getDoc(userRef);
+
+  const profile = userSnapshot.exists()
+    ? userSnapshot.data()
+    : {};
+
+  currentProfile = profile;
+
+  currentUserName =
+    profile.displayName ||
+    currentUser.displayName ||
+    currentUser.email?.split("@")[0] ||
+    "Student";
+
+  const userName = document.getElementById("userName");
+  const welcomeName = document.getElementById("welcomeName");
+  const sidebarName = document.getElementById("sidebar-name");
+
+  if (userName) userName.textContent = currentUserName;
+  if (welcomeName) welcomeName.textContent = currentUserName;
+  if (sidebarName) sidebarName.textContent = currentUserName;
+
+  setProfileField("full-name", profile.displayName || currentUserName);
+  setProfileField("student-id", profile.studentId || "");
+  setProfileField("email", profile.email || currentUser.email || "");
+  setProfileField("phone", profile.contact || "");
+  setProfileField("faculty", profile.faculty || "");
+  setProfileField("department", profile.department || "");
+  setProfileField("university", profile.university || "");
+  setProfileField("academic-year", profile.academicYear || "");
+
+  const accountStatus = document.getElementById("account-status");
+
+  if (accountStatus) {
+    accountStatus.value = currentUser.emailVerified
+      ? "Verified Account"
+      : "Not Verified";
+  }
+
+  displayProfileImage(profile.profileImageUrl || "");
+}
+
+function setProfileField(id, value) {
+  const field = document.getElementById(id);
+
+  if (field) field.value = value;
+}
+
+
+/* =========================================
+   8. PROFILE IMAGE UPLOAD
+========================================= */
+
+if (profileImageInput) {
+  profileImageInput.addEventListener("change", async () => {
+    const file = profileImageInput.files?.[0];
+
+    if (!file || !currentUser) return;
+
+    try {
+      validateImage(file);
+
+      if (profileImageMessage) {
+        profileImageMessage.textContent = "Uploading photo...";
+        profileImageMessage.className = "image-upload-message";
+      }
+
+      profileImageInput.disabled = true;
+
+      const oldImagePath = currentProfile.profileImagePath || "";
+
+      const uploaded = await uploadImage(file, "profileImages");
+
+      try {
+        await updateDoc(doc(db, "users", currentUser.uid), {
+          profileImageUrl: uploaded.imageUrl,
+          profileImagePath: uploaded.imagePath,
+          updatedAt: serverTimestamp()
+        });
+      } catch (error) {
+        await deleteStoredImage(uploaded.imagePath);
+        throw error;
+      }
+
+      currentProfile.profileImageUrl = uploaded.imageUrl;
+      currentProfile.profileImagePath = uploaded.imagePath;
+
+      displayProfileImage(uploaded.imageUrl);
+
+      // Delete previous photo only after the new photo is saved.
+      if (oldImagePath && oldImagePath !== uploaded.imagePath) {
+        await deleteStoredImage(oldImagePath);
+      }
+
+      if (profileImageMessage) {
+        profileImageMessage.textContent = "Profile photo updated successfully.";
+        profileImageMessage.className = "image-upload-message success";
+      }
+
+    } catch (error) {
+      console.error("Profile image upload error:", error);
+
+      if (profileImageMessage) {
+        profileImageMessage.textContent =
+          error.message || "Unable to upload profile photo.";
+        profileImageMessage.className = "image-upload-message error";
+      }
+
+    } finally {
+      profileImageInput.disabled = false;
+      profileImageInput.value = "";
+    }
+  });
+}
+
+
+/* =========================================
+   9. PROFILE EDITING
+========================================= */
+
+const profileForm = document.getElementById("profile-form");
+const editProfileButton = document.getElementById("edit-profile-button");
+const cancelEditButton = document.getElementById("cancel-edit-button");
+const formActions = document.getElementById("form-actions");
+const profileMessage = document.getElementById("profile-message");
+
+function setProfileEditing(enabled) {
+  const editableFields = [
+    "full-name",
+    "phone",
+    "faculty",
+    "department",
+    "university",
+    "academic-year"
+  ];
+
+  editableFields.forEach((id) => {
+    const field = document.getElementById(id);
+
+    if (field) field.disabled = !enabled;
+  });
+
+  if (editProfileButton) {
+    editProfileButton.style.display = enabled ? "none" : "inline-flex";
+  }
+
+  if (formActions) {
+    formActions.hidden = !enabled;
+  }
+}
+
+if (editProfileButton) {
+  editProfileButton.addEventListener("click", () => {
+    if (profileMessage) profileMessage.textContent = "";
+    setProfileEditing(true);
+  });
+}
+
+if (cancelEditButton) {
+  cancelEditButton.addEventListener("click", async () => {
+    await loadUserProfile();
+    setProfileEditing(false);
+
+    if (profileMessage) profileMessage.textContent = "";
+  });
+}
+
+if (profileForm) {
+  profileForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    if (!currentUser) return;
+
+    const fullName = document.getElementById("full-name")?.value.trim();
+    const phone = document.getElementById("phone")?.value.trim();
+    const faculty = document.getElementById("faculty")?.value.trim();
+    const department = document.getElementById("department")?.value.trim();
+    const university = document.getElementById("university")?.value.trim();
+    const academicYear = document.getElementById("academic-year")?.value.trim();
+
+    if (!fullName) {
+      showMessage(profileMessage, "Please enter your full name.", "error");
+      return;
+    }
+
+    const saveButton = profileForm.querySelector('button[type="submit"]');
+
+    setButtonLoading(saveButton, true, "Saving...");
+
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+
+      await updateDoc(userRef, {
+        displayName: fullName,
+        contact: phone,
+        faculty,
+        department,
+        university,
+        academicYear,
+        updatedAt: serverTimestamp()
+      });
+
+      await updateProfile(currentUser, {
+        displayName: fullName
+      });
+
+      currentUserName = fullName;
+
+      await loadUserProfile();
+      setProfileEditing(false);
+
+      showMessage(
+        profileMessage,
+        "Your profile has been updated successfully.",
+        "success"
+      );
+
+    } catch (error) {
+      console.error("Profile update error:", error);
+
+      showMessage(
+        profileMessage,
+        "Unable to update your profile. Please try again.",
+        "error"
+      );
+
+    } finally {
+      setButtonLoading(saveButton, false);
+    }
+  });
+}
+
+
+/* =========================================
+   10. LOAD BORROW REQUESTS RECEIVED
+========================================= */
+
+async function loadReceivedRequests() {
+  if (!currentUser || !requestsList) return;
+
+  try {
+    const requestsQuery = query(
+      collection(db, "borrowRequests"),
+      where("ownerId", "==", currentUser.uid)
+    );
+
+    const snapshot = await getDocs(requestsQuery);
+
+    if (snapshot.empty) {
+      showEmptyMessage(requestsList, "You have not received any borrow requests yet.");
+      return;
+    }
+
+    const requests = snapshot.docs.map((document) => ({
+      id: document.id,
+      ...document.data()
+    }));
+
+    requests.sort(
+      (a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt)
+    );
+
+    requestsList.innerHTML = requests.map((request) => {
+      const status = request.status || "pending";
+
+      let actionButtons = "";
+
+      if (status === "pending") {
+        actionButtons = `
+          <button class="btn btn-primary" data-action="accept"
+                  data-request-id="${escapeHTML(request.id)}">Accept</button>
+          <button class="btn btn-danger" data-action="reject"
+                  data-request-id="${escapeHTML(request.id)}">Reject</button>
+        `;
+      }
+
+      if (status === "return_requested") {
+        actionButtons = `
+          <button class="btn btn-primary" data-action="confirm-return"
+                  data-request-id="${escapeHTML(request.id)}">Confirm Return</button>
+        `;
+      }
+
+      return `
+        <div class="request-card">
+          <div class="request-card-header">
+            <h3>${escapeHTML(request.itemName || "Resource")}</h3>
+            <span class="status-badge ${statusClass(status)}">
+              ${escapeHTML(formatStatus(status))}
+            </span>
+          </div>
+          <p><strong>Borrower:</strong> ${escapeHTML(request.borrowerName || "Student")}</p>
+          <p><strong>Start Date:</strong> ${formatDate(request.startDate)}</p>
+          <p><strong>End Date:</strong> ${formatDate(request.endDate)}</p>
+          <p><strong>Requested On:</strong> ${formatDate(request.createdAt)}</p>
+          <div class="card-actions">
+            ${createChatLink(request.id)}
+            ${actionButtons}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (error) {
+    console.error("Received requests error:", error);
+    showEmptyMessage(requestsList, "Unable to load received requests.");
+  }
+}
+
+
+/* =========================================
+   11. ACCEPT / REJECT BORROW REQUEST
+========================================= */
+
+async function updateBorrowRequest(requestId, action) {
+  if (!currentUser) return;
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const requestRef = doc(db, "borrowRequests", requestId);
+      const requestSnapshot = await transaction.get(requestRef);
+
+      if (!requestSnapshot.exists()) {
+        throw new Error("Borrow request not found.");
+      }
+
+      const request = requestSnapshot.data();
+
+      if (request.ownerId !== currentUser.uid) {
+        throw new Error("You are not allowed to update this request.");
+      }
+
+      if (request.status !== "pending") {
+        throw new Error("This request has already been processed.");
+      }
+
+      const itemRef = doc(db, "items", request.itemId);
+      const itemSnapshot = await transaction.get(itemRef);
+
+      if (!itemSnapshot.exists()) {
+        throw new Error("Resource not found.");
+      }
+
+      const item = itemSnapshot.data();
+
+      if (item.ownerId !== currentUser.uid) {
+        throw new Error("You do not own this resource.");
+      }
+
+      if (item.isArchived === true) {
+        throw new Error("This resource has been archived.");
+      }
+
+      if (action === "accept") {
+        if (item.activeRequestId && item.activeRequestId !== requestId) {
+          const activeRequestRef = doc(
+            db,
+            "borrowRequests",
+            item.activeRequestId
+          );
+
+          const activeRequestSnapshot = await transaction.get(activeRequestRef);
+
+          if (activeRequestSnapshot.exists()) {
+            const activeRequest = activeRequestSnapshot.data();
+
+            if (
+              activeRequest.status === "approved" ||
+              activeRequest.status === "return_requested"
+            ) {
+              throw new Error(
+                "This resource is already borrowed by another student."
+              );
+            }
+          }
+        }
+
+        transaction.update(requestRef, {
+          status: "approved",
+          updatedAt: serverTimestamp()
+        });
+
+        transaction.update(itemRef, {
+          available: false,
+          activeRequestId: requestId,
+          updatedAt: serverTimestamp()
+        });
+
+      } else if (action === "reject") {
+        transaction.update(requestRef, {
+          status: "rejected",
+          updatedAt: serverTimestamp()
+        });
+
+      } else {
+        throw new Error("Invalid request action.");
+      }
+    });
+
+    alert(action === "accept"
+      ? "Borrow request accepted."
+      : "Borrow request rejected.");
+
+    await refreshDashboard();
+
+  } catch (error) {
+    console.error("Request update error:", error);
+    alert(error.message || "Unable to update the request.");
+  }
+}
+
+
+/* =========================================
+   12. LOAD MY LISTED RESOURCES
+========================================= */
+
+async function loadMyItems() {
+  if (!currentUser || !itemsList) return;
+
+  try {
+    const itemsQuery = query(
+      collection(db, "items"),
+      where("ownerId", "==", currentUser.uid)
+    );
+
+    const snapshot = await getDocs(itemsQuery);
+
+    const items = snapshot.docs
+      .map((document) => ({
+        id: document.id,
+        ...document.data()
+      }))
+      .filter((item) => item.isArchived !== true);
+
+    if (items.length === 0) {
+      showEmptyMessage(itemsList, "You have not listed any active resources yet.");
+      return;
+    }
+
+    items.sort(
+      (a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt)
+    );
+
+    itemsList.innerHTML = items.map((item) => {
+      const available = item.available !== false;
+
+      const imageHTML = item.imageUrl
+        ? `<img class="item-card-image"
+                src="${escapeHTML(item.imageUrl)}"
+                alt="${escapeHTML(item.name || "Resource")}"
+                loading="lazy">`
+        : `<div class="item-image-placeholder">${getItemIcon(item.category)}</div>`;
+
+      return `
+        <div class="item-card">
+          ${imageHTML}
+
+          <div class="item-card-header">
+            <span class="item-icon">${getItemIcon(item.category)}</span>
+            <span class="status-badge ${available ? "approved" : "pending"}">
+              ${available ? "Available" : "Borrowed"}
+            </span>
+          </div>
+
+          <h3>${escapeHTML(item.name || "Untitled Resource")}</h3>
+          <p><strong>Category:</strong> ${escapeHTML(item.category || "Other")}</p>
+          <p><strong>Location:</strong> ${escapeHTML(item.location || "Not specified")}</p>
+
+          <div class="card-actions">
+            <a class="btn btn-secondary"
+               href="item-details.html?item=${encodeURIComponent(item.id)}">
+              View Resource
+            </a>
+
+            <button class="btn btn-danger"
+                    data-action="delete-item"
+                    data-item-id="${escapeHTML(item.id)}">
+              Remove Resource
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (error) {
+    console.error("My items error:", error);
+    showEmptyMessage(itemsList, "Unable to load your listed resources.");
+  }
+}
+
+
+/* =========================================
+   13. ARCHIVE / REMOVE MY RESOURCE
+========================================= */
+
+async function deleteMyItem(itemId) {
+  if (!currentUser || !itemId) return;
+
+  const confirmed = confirm(
+    "Remove this resource from your active listings?\n\n" +
+    "If someone has borrowed it, the borrowing record will be kept " +
+    "until the return is completed."
+  );
+
+  if (!confirmed) return;
+
+  try {
+    const itemRef = doc(db, "items", itemId);
+    const initialItemSnapshot = await getDoc(itemRef);
+
+    if (!initialItemSnapshot.exists()) {
+      throw new Error("Resource not found.");
+    }
+
+    const initialItem = initialItemSnapshot.data();
+
+    if (initialItem.ownerId !== currentUser.uid) {
+      throw new Error("You are not allowed to remove this resource.");
+    }
+
+    if (initialItem.isArchived === true) {
+      throw new Error("This resource has already been removed.");
+    }
+
+    const requestsQuery = query(
+      collection(db, "borrowRequests"),
+      where("itemId", "==", itemId),
+      where("ownerId", "==", currentUser.uid)
+    );
+
+    const requestsSnapshot = await getDocs(requestsQuery);
+
+    const requestRefs = requestsSnapshot.docs.map((document) =>
+      doc(db, "borrowRequests", document.id)
+    );
+
+    await runTransaction(db, async (transaction) => {
+      const itemSnapshot = await transaction.get(itemRef);
+
+      if (!itemSnapshot.exists()) {
+        throw new Error("Resource not found.");
+      }
+
+      const item = itemSnapshot.data();
+
+      if (item.ownerId !== currentUser.uid) {
+        throw new Error("You are not allowed to remove this resource.");
+      }
+
+      if (item.isArchived === true) {
+        throw new Error("This resource has already been removed.");
+      }
+
+      const requestSnapshots = [];
+
+      for (const requestRef of requestRefs) {
+        const requestSnapshot = await transaction.get(requestRef);
+
+        if (requestSnapshot.exists()) {
+          requestSnapshots.push({
+            ref: requestRef,
+            data: requestSnapshot.data()
+          });
+        }
+      }
+
+      const activeRequests = requestSnapshots.filter(({ data }) => {
+        return data.status === "approved" ||
+          data.status === "return_requested";
+      });
+
+      if (activeRequests.length > 1) {
+        throw new Error(
+          "Multiple active borrowings were found. Please check the requests first."
+        );
+      }
+
+      requestSnapshots.forEach(({ ref, data }) => {
+        if (data.status === "pending") {
+          transaction.update(ref, {
+            status: "rejected",
+            updatedAt: serverTimestamp()
+          });
+        }
+      });
+
+      const activeRequestId = activeRequests.length === 1
+        ? activeRequests[0].ref.id
+        : null;
+
+      transaction.update(itemRef, {
+        isArchived: true,
+        archivedAt: serverTimestamp(),
+        available: false,
+        activeRequestId,
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    alert("Resource removed from your active listings successfully.");
+    await refreshDashboard();
+
+  } catch (error) {
+    console.error("Remove resource error:", error);
+    alert(error.message || "Unable to remove this resource.");
+  }
+}
+
+
+/* =========================================
+   14. LOAD MY BORROW REQUESTS
+========================================= */
+
+async function loadMyRequests() {
+  if (!currentUser || !myRequestsList) return;
+
+  try {
+    const requestsQuery = query(
+      collection(db, "borrowRequests"),
+      where("borrowerId", "==", currentUser.uid)
+    );
+
+    const snapshot = await getDocs(requestsQuery);
+
+    if (snapshot.empty) {
+      showEmptyMessage(myRequestsList, "You have not made any borrow requests yet.");
+      return;
+    }
+
+    const requests = snapshot.docs.map((document) => ({
+      id: document.id,
+      ...document.data()
+    }));
+
+    requests.sort(
+      (a, b) => getTimestamp(b.createdAt) - getTimestamp(a.createdAt)
+    );
+
+    myRequestsList.innerHTML = requests.map((request) => {
+      const status = request.status || "pending";
+
+      return `
+        <div class="request-card">
+          <div class="request-card-header">
+            <h3>${escapeHTML(request.itemName || "Resource")}</h3>
+            <span class="status-badge ${statusClass(status)}">
+              ${escapeHTML(formatStatus(status))}
+            </span>
+          </div>
+
+          <p><strong>Owner:</strong> ${escapeHTML(request.ownerName || "Student")}</p>
+          <p><strong>Start Date:</strong> ${formatDate(request.startDate)}</p>
+          <p><strong>End Date:</strong> ${formatDate(request.endDate)}</p>
+
+          <div class="card-actions">${createChatLink(request.id)}</div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (error) {
+    console.error("My requests error:", error);
+    showEmptyMessage(myRequestsList, "Unable to load your borrow requests.");
+  }
+}
+
+
+/* =========================================
+   15. LOAD MY CURRENT BORROWINGS
+========================================= */
+
+async function loadMyBorrowings() {
+  if (!currentUser || !myBorrowingsList) return;
+
+  try {
+    const requestsQuery = query(
+      collection(db, "borrowRequests"),
+      where("borrowerId", "==", currentUser.uid)
+    );
+
+    const snapshot = await getDocs(requestsQuery);
+
+    const borrowings = snapshot.docs
+      .map((document) => ({
+        id: document.id,
+        ...document.data()
+      }))
+      .filter((request) => {
+        return ["approved", "return_requested"].includes(request.status);
+      });
+
+    if (borrowings.length === 0) {
+      showEmptyMessage(myBorrowingsList, "You do not have any active borrowings.");
+      return;
+    }
+
+    myBorrowingsList.innerHTML = borrowings.map((request) => {
+      const status = request.status;
+
+      const returnButton = status === "approved"
+        ? `<button class="btn btn-primary"
+                   data-action="request-return"
+                   data-request-id="${escapeHTML(request.id)}">
+             Request Return
+           </button>`
+        : `<span class="status-badge pending">
+             Waiting for owner confirmation
+           </span>`;
+
+      return `
+        <div class="request-card">
+          <div class="request-card-header">
+            <h3>${escapeHTML(request.itemName || "Resource")}</h3>
+            <span class="status-badge ${statusClass(status)}">
+              ${escapeHTML(formatStatus(status))}
+            </span>
+          </div>
+
+          <p><strong>Owner:</strong> ${escapeHTML(request.ownerName || "Student")}</p>
+          <p><strong>Return Date:</strong> ${formatDate(request.endDate)}</p>
+
+          <div class="card-actions">
+            ${createChatLink(request.id)}
+            ${returnButton}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (error) {
+    console.error("My borrowings error:", error);
+    showEmptyMessage(myBorrowingsList, "Unable to load your borrowings.");
+  }
+}
+
+
+/* =========================================
+   16. REQUEST RETURN
+========================================= */
+
+async function requestReturn(requestId) {
+  if (!currentUser) return;
+
+  const confirmed = confirm(
+    "Do you want to request the return of this resource?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const requestRef = doc(db, "borrowRequests", requestId);
+      const requestSnapshot = await transaction.get(requestRef);
+
+      if (!requestSnapshot.exists()) {
+        throw new Error("Borrow request not found.");
+      }
+
+      const request = requestSnapshot.data();
+
+      if (request.borrowerId !== currentUser.uid) {
+        throw new Error("You are not allowed to update this request.");
+      }
+
+      if (request.status !== "approved") {
+        throw new Error("This borrowing cannot be returned now.");
+      }
+
+      transaction.update(requestRef, {
+        status: "return_requested",
+        returnRequestedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    alert("Return request sent to the resource owner.");
+    await refreshDashboard();
+
+  } catch (error) {
+    console.error("Return request error:", error);
+    alert(error.message || "Unable to request return.");
+  }
+}
+
+
+/* =========================================
+   17. CONFIRM RETURN
+========================================= */
+
+async function confirmReturn(requestId) {
+  if (!currentUser) return;
+
+  const confirmed = confirm(
+    "Confirm that the resource has been returned?"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await runTransaction(db, async (transaction) => {
+      const requestRef = doc(db, "borrowRequests", requestId);
+      const requestSnapshot = await transaction.get(requestRef);
+
+      if (!requestSnapshot.exists()) {
+        throw new Error("Borrow request not found.");
+      }
+
+      const request = requestSnapshot.data();
+
+      if (request.ownerId !== currentUser.uid) {
+        throw new Error("You are not allowed to confirm this return.");
+      }
+
+      if (request.status !== "return_requested") {
+        throw new Error("This return request is no longer active.");
+      }
+
+      const itemRef = doc(db, "items", request.itemId);
+      const itemSnapshot = await transaction.get(itemRef);
+
+      if (!itemSnapshot.exists()) {
+        throw new Error("Resource not found.");
+      }
+
+      const item = itemSnapshot.data();
+
+      if (
+        item.ownerId !== currentUser.uid ||
+        item.activeRequestId !== requestId
+      ) {
+        throw new Error("Resource ownership or request details do not match.");
+      }
+
+      transaction.update(requestRef, {
+        status: "returned",
+        returnedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      transaction.update(itemRef, {
+        available: item.isArchived === true ? false : true,
+        activeRequestId: null,
+        updatedAt: serverTimestamp()
+      });
+    });
+
+    alert("Return confirmed successfully.");
+    await refreshDashboard();
+
+  } catch (error) {
+    console.error("Confirm return error:", error);
+    alert(error.message || "Unable to confirm return.");
+  }
+}
+
+
+/* =========================================
+   18. LOAD HISTORY
+========================================= */
+
+async function loadHistory() {
+  if (!currentUser || !historyList) return;
+
+  try {
+    const borrowerQuery = query(
+      collection(db, "borrowRequests"),
+      where("borrowerId", "==", currentUser.uid)
+    );
+
+    const ownerQuery = query(
+      collection(db, "borrowRequests"),
+      where("ownerId", "==", currentUser.uid)
+    );
+
+    const [borrowerSnapshot, ownerSnapshot] = await Promise.all([
+      getDocs(borrowerQuery),
+      getDocs(ownerQuery)
+    ]);
+
+    const requestMap = new Map();
+
+    borrowerSnapshot.docs.forEach((document) => {
+      requestMap.set(document.id, {
+        id: document.id,
+        ...document.data()
+      });
+    });
+
+    ownerSnapshot.docs.forEach((document) => {
+      requestMap.set(document.id, {
+        id: document.id,
+        ...document.data()
+      });
+    });
+
+    const history = Array.from(requestMap.values()).filter((request) => {
+      return ["returned", "rejected"].includes(request.status);
+    });
+
+    history.sort((a, b) => {
+      const aDate = getTimestamp(a.updatedAt || a.createdAt);
+      const bDate = getTimestamp(b.updatedAt || b.createdAt);
+      return bDate - aDate;
+    });
+
+    if (history.length === 0) {
+      showEmptyMessage(historyList, "Your borrowing history is empty.");
+      return;
+    }
+
+    historyList.innerHTML = history.map((request) => {
+      const isOwner = request.ownerId === currentUser.uid;
+
+      return `
+        <div class="request-card">
+          <div class="request-card-header">
+            <h3>${escapeHTML(request.itemName || "Resource")}</h3>
+            <span class="status-badge ${statusClass(request.status)}">
+              ${escapeHTML(formatStatus(request.status))}
+            </span>
+          </div>
+
+          <p><strong>Role:</strong> ${isOwner ? "Resource Owner" : "Borrower"}</p>
+
+          <p>
+            <strong>${isOwner ? "Borrower:" : "Owner:"}</strong>
+            ${escapeHTML(
+              isOwner
+                ? request.borrowerName || "Student"
+                : request.ownerName || "Student"
+            )}
+          </p>
+
+          <p><strong>Completed / Updated:</strong>
+            ${formatDate(request.updatedAt || request.createdAt)}
+          </p>
+
+          <div class="card-actions">${createChatLink(request.id)}</div>
+        </div>
+      `;
+    }).join("");
+
+  } catch (error) {
+    console.error("History error:", error);
+    showEmptyMessage(historyList, "Unable to load your history.");
+  }
+}
+
+
+/* =========================================
+   19. RESOURCE IMAGE PREVIEW
+========================================= */
+
+let selectedItemImage = null;
+let itemImagePreviewUrl = null;
+
+function clearItemImagePreview() {
+  selectedItemImage = null;
+
+  if (itemImagePreviewUrl) {
+    URL.revokeObjectURL(itemImagePreviewUrl);
+    itemImagePreviewUrl = null;
+  }
+
+  if (itemImageInput) itemImageInput.value = "";
+
+  if (itemImagePreview) {
+    itemImagePreview.removeAttribute("src");
+  }
+
+  if (itemImagePreviewContainer) {
+    itemImagePreviewContainer.hidden = true;
+  }
+}
+
+if (itemImageInput) {
+  itemImageInput.addEventListener("change", () => {
+    const file = itemImageInput.files?.[0];
+
+    if (!file) {
+      clearItemImagePreview();
+      return;
+    }
+
+    try {
+      validateImage(file);
+
+      if (itemImagePreviewUrl) {
+        URL.revokeObjectURL(itemImagePreviewUrl);
+      }
+
+      selectedItemImage = file;
+      itemImagePreviewUrl = URL.createObjectURL(file);
+
+      itemImagePreview.src = itemImagePreviewUrl;
+      itemImagePreviewContainer.hidden = false;
+
+      showMessage(itemFormMessage, "", "success");
+      itemFormMessage.textContent = "";
+
+    } catch (error) {
+      clearItemImagePreview();
+      showMessage(itemFormMessage, error.message, "error");
+    }
+  });
+}
+
+if (removeItemImageButton) {
+  removeItemImageButton.addEventListener("click", () => {
+    clearItemImagePreview();
+  });
+}
+
+
+/* =========================================
+   20. ADD NEW RESOURCE WITH IMAGE
+========================================= */
+
+async function handleAddItem(event) {
+  event.preventDefault();
+
+  if (!currentUser) {
+    showMessage(itemFormMessage, "Please log in to add a resource.", "error");
+    return;
+  }
+
+  if (!currentUser.emailVerified) {
+    showMessage(
+      itemFormMessage,
+      "Please verify your email before adding a resource.",
+      "error"
+    );
+    return;
+  }
+
+  const name = document.getElementById("itemName")?.value.trim();
+  const category = document.getElementById("itemCategory")?.value;
+  const description = document.getElementById("itemDescription")?.value.trim();
+  const location = document.getElementById("itemLocation")?.value.trim();
+
+  if (!name || !category || !description || !location) {
+    showMessage(itemFormMessage, "Please complete all required fields.", "error");
+    return;
+  }
+
+  if (selectedItemImage) {
+    try {
+      validateImage(selectedItemImage);
+    } catch (error) {
+      showMessage(itemFormMessage, error.message, "error");
+      return;
+    }
+  }
+
+  setButtonLoading(addItemButton, true, "Adding Resource...");
+
+  let uploadedImagePath = null;
+
+  try {
+    await currentUser.reload();
+    currentUser = auth.currentUser;
+
+    if (!currentUser || !currentUser.emailVerified) {
+      throw new Error("Please verify your email before adding a resource.");
+    }
+
+    let imageUrl = "";
+    let imagePath = "";
+
+    // Upload resource image if selected.
+    if (selectedItemImage) {
+      const uploaded = await uploadImage(
+        selectedItemImage,
+        "resourceImages"
+      );
+
+      imageUrl = uploaded.imageUrl;
+      imagePath = uploaded.imagePath;
+      uploadedImagePath = uploaded.imagePath;
+    }
+
+    await addDoc(collection(db, "items"), {
+      name,
+      category,
+      description,
+      location,
+
+      imageUrl,
+      imagePath,
+
+      condition: "Good",
+      fee: 0,
+      maxDuration: 0,
+
+      ownerId: currentUser.uid,
+      ownerName: currentUserName,
+
+      available: true,
+      activeRequestId: null,
+      isArchived: false,
+
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    addItemForm.reset();
+    clearItemImagePreview();
+
+    showMessage(
+      itemFormMessage,
+      "Resource added successfully!",
+      "success"
+    );
+
+    await refreshDashboard();
+
+  } catch (error) {
+    console.error("Add resource error:", error);
+
+    // If Firestore save fails, remove the uploaded image.
+    if (uploadedImagePath) {
+      await deleteStoredImage(uploadedImagePath);
+    }
+
+    showMessage(
+      itemFormMessage,
+      error.message || "Unable to add resource.",
+      "error"
+    );
+
+  } finally {
+    setButtonLoading(addItemButton, false);
+  }
+}
+
+if (addItemForm) {
+  addItemForm.addEventListener("submit", handleAddItem);
+}
+
+
+/* =========================================
+   21. DASHBOARD REFRESH
+========================================= */
+
+async function refreshDashboard() {
+  await Promise.all([
+    loadReceivedRequests(),
+    loadMyItems(),
+    loadMyRequests(),
+    loadMyBorrowings(),
+    loadHistory()
+  ]);
+}
+
+
+/* =========================================
+   22. ACTION BUTTON EVENT HANDLER
+========================================= */
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+
+  if (!button) return;
+
+  const action = button.dataset.action;
+  const requestId = button.dataset.requestId;
+  const itemId = button.dataset.itemId;
+
+  button.disabled = true;
+
+  try {
+    switch (action) {
+      case "accept":
+        await updateBorrowRequest(requestId, "accept");
+        break;
+
+      case "reject":
+        await updateBorrowRequest(requestId, "reject");
+        break;
+
+      case "request-return":
+        await requestReturn(requestId);
+        break;
+
+      case "confirm-return":
+        await confirmReturn(requestId);
+        break;
+
+      case "delete-item":
+        await deleteMyItem(itemId);
+        break;
+
+      default:
+        console.warn("Unknown dashboard action:", action);
+    }
+
+  } catch (error) {
+    console.error("Action button error:", error);
+    alert(error.message || "Unable to complete this action.");
+
+  } finally {
+    button.disabled = false;
+  }
+});
+
+
+/* =========================================
+   23. LOGOUT
+========================================= */
+
+if (logoutButton) {
+  logoutButton.addEventListener("click", async () => {
+    logoutButton.disabled = true;
+    logoutButton.textContent = "Logging out...";
+
+    try {
+      await signOut(auth);
+      window.location.replace("login.html");
+
+    } catch (error) {
+      console.error("Logout error:", error);
+
+      alert("Unable to log out. Please try again.");
+
+      logoutButton.disabled = false;
+      logoutButton.textContent = "Logout";
+    }
+  });
+}
+
+
+/* =========================================
+   24. BROWSER BACK / CACHE PROTECTION
+========================================= */
+
+window.addEventListener("pageshow", async (event) => {
+  if (!event.persisted) return;
+
+  await authStateReady;
+
+  if (!auth.currentUser) {
+    window.location.replace("login.html");
+  } else {
+    window.location.reload();
+  }
+});
+
+
+/* =========================================
+   25. FIREBASE AUTHENTICATION CHECK
+========================================= */
+
+onAuthStateChanged(auth, async (user) => {
+  authReadyResolve();
+
+  if (!user) {
+    currentUser = null;
+    window.location.replace("login.html");
+    return;
+  }
+
+  try {
+    await user.reload();
+    await user.getIdToken(true);
+
+    currentUser = auth.currentUser;
+
+    if (!currentUser || !currentUser.emailVerified) {
+      await signOut(auth);
+      window.location.replace("login.html");
+      return;
+    }
+
+    await loadUserProfile();
+    await refreshDashboard();
+
+  } catch (error) {
+    console.error("Dashboard initialization error:", error);
+
+    alert("Unable to load your dashboard. Please log in again.");
+
+    await signOut(auth);
+    window.location.replace("login.html");
+  }
+});
+// =====================================
+// MOBILE HAMBURGER NAVIGATION
+// =====================================
+
+const menuToggle = document.getElementById("menuToggle");
+const sidebar = document.querySelector(".sidebar");
+const sidebarOverlay = document.getElementById("sidebarOverlay");
+
+function openSidebar() {
+
+    sidebar.classList.add("mobile-open");
+    sidebarOverlay.classList.add("active");
+
+    menuToggle.innerHTML = "✕";
+
+    menuToggle.setAttribute("aria-expanded", "true");
+    menuToggle.setAttribute("aria-label", "Close navigation menu");
+
+}
+
+function closeSidebar() {
+
+    sidebar.classList.remove("mobile-open");
+    sidebarOverlay.classList.remove("active");
+
+    menuToggle.innerHTML = "☰";
+
+    menuToggle.setAttribute("aria-expanded", "false");
+    menuToggle.setAttribute("aria-label", "Open navigation menu");
+
+}
+
+menuToggle?.addEventListener("click", () => {
+
+    if (sidebar.classList.contains("mobile-open")) {
+        closeSidebar();
+    } else {
+        openSidebar();
+    }
+
+});
+
+// Close when clicking outside sidebar
+sidebarOverlay?.addEventListener("click", closeSidebar);
+
+// Close after clicking navigation links
+sidebar?.querySelectorAll("a").forEach(link => {
+
+    link.addEventListener("click", () => {
+
+        if (window.innerWidth <= 768) {
+            closeSidebar();
+        }
+
+    });
+
+});
+
+// Close when switching to desktop
+window.addEventListener("resize", () => {
+
+    if (window.innerWidth > 768) {
+        closeSidebar();
+    }
+
+});

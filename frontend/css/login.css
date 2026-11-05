@@ -1,0 +1,364 @@
+/* Login Page */
+
+.login-section {
+    min-height: calc(100vh - 150px);
+    padding: 60px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f7f8fc;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 1100px;
+    display: grid;
+    grid-template-columns: 1fr 440px;
+    align-items: center;
+    gap: 65px;
+}
+
+/* Left Information Section */
+
+.login-info {
+    padding: 20px 0;
+}
+
+.login-info h1 {
+    margin: 18px 0;
+    font-size: clamp(2.2rem, 4vw, 3.5rem);
+    line-height: 1.15;
+    letter-spacing: -1.5px;
+    color: #17213a;
+}
+
+.login-info h1 span {
+    display: block;
+    color: #6754e8;
+}
+
+.login-info > p {
+    max-width: 480px;
+    color: #697386;
+    line-height: 1.8;
+    font-size: 1rem;
+}
+
+.benefits {
+    margin-top: 35px;
+    display: grid;
+    gap: 22px;
+}
+
+.benefit-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+}
+
+.benefit-icon {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #e8e5ff;
+    color: #6754e8;
+    font-weight: bold;
+}
+
+.benefit-item h3 {
+    margin: 2px 0 5px;
+    color: #17213a;
+    font-size: 1rem;
+}
+
+.benefit-item p {
+    margin: 0;
+    color: #697386;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* Login Card */
+
+.login-card {
+    width: 100%;
+    padding: 38px;
+    background: #ffffff;
+    border: 1px solid #e9eaf2;
+    border-radius: 18px;
+    box-shadow: 0 15px 45px rgba(32, 41, 75, 0.08);
+}
+
+.form-heading {
+    margin-bottom: 28px;
+}
+
+.form-heading h2 {
+    margin: 0 0 10px;
+    color: #17213a;
+    font-size: 1.8rem;
+}
+
+.form-heading p {
+    margin: 0;
+    color: #788195;
+    font-size: 0.92rem;
+    line-height: 1.6;
+}
+
+/* Form Fields */
+
+.form-group {
+    margin-bottom: 22px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 9px;
+    color: #283149;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.form-group input {
+    width: 100%;
+    height: 48px;
+    padding: 0 14px;
+    border: 1px solid #dfe2ec;
+    border-radius: 9px;
+    outline: none;
+    background: #ffffff;
+    color: #17213a;
+    font-family: inherit;
+    font-size: 0.9rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input:focus {
+    border-color: #6754e8;
+    box-shadow: 0 0 0 3px rgba(103, 84, 232, 0.12);
+}
+
+.form-group input::placeholder {
+    color: #a0a6b5;
+}
+
+/* Password Field */
+
+.password-wrapper {
+    position: relative;
+}
+
+.password-wrapper input {
+    padding-right: 65px;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: #6754e8;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+/* Remember Me and Forgot Password */
+
+.form-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin: 5px 0 20px;
+    font-size: 0.82rem;
+}
+
+.remember-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #697386;
+    cursor: pointer;
+}
+
+.remember-label input {
+    accent-color: #6754e8;
+}
+
+.form-options a,
+.register-text a {
+    color: #6754e8;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.form-options a:hover,
+.register-text a:hover {
+    text-decoration: underline;
+}
+
+/* Login Button */
+
+.login-button {
+    width: 100%;
+    min-height: 49px;
+    border: none;
+    border-radius: 9px;
+    background: #6754e8;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+}
+
+.login-button:hover {
+    background: #5542d2;
+    transform: translateY(-1px);
+}
+
+.login-button:focus-visible,
+.toggle-password:focus-visible {
+    outline: 3px solid #bdb4ff;
+    outline-offset: 3px;
+}
+
+/* Messages */
+
+.form-message {
+    display: none;
+    margin: 0 0 15px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+
+.form-message.visible {
+    display: block;
+}
+
+.form-message.error {
+    color: #c62828;
+}
+
+.form-message.success {
+    color: #21804a;
+}
+
+/* Divider and Links */
+
+.form-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 27px 0 18px;
+    color: #9aa1b1;
+    font-size: 0.72rem;
+    letter-spacing: 1px;
+}
+
+.form-divider::before,
+.form-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e9eaf2;
+}
+
+.register-text {
+    margin: 0;
+    text-align: center;
+    color: #697386;
+    font-size: 0.88rem;
+    line-height: 1.7;
+}
+
+.back-home {
+    display: block;
+    margin-top: 24px;
+    text-align: center;
+    color: #697386;
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.back-home:hover {
+    color: #6754e8;
+}
+
+/* Footer */
+
+.login-footer {
+    padding: 20px;
+    background: #ffffff;
+    border-top: 1px solid #e9eaf2;
+    text-align: center;
+}
+
+.login-footer p {
+    margin: 0;
+    color: #788195;
+    font-size: 0.82rem;
+}
+
+/* Responsive Design */
+
+@media (max-width: 900px) {
+    .login-container {
+        max-width: 520px;
+        grid-template-columns: 1fr;
+        gap: 35px;
+    }
+
+    .login-info {
+        text-align: center;
+    }
+
+    .login-info > p {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .benefits {
+        max-width: 380px;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: left;
+    }
+}
+
+@media (max-width: 600px) {
+    .login-section {
+        padding: 35px 16px;
+    }
+
+    .login-card {
+        padding: 25px 20px;
+    }
+
+    .login-info h1 {
+        font-size: 2.2rem;
+    }
+
+    .nav-links {
+        gap: 12px;
+    }
+
+    .nav-links a {
+        font-size: 0.8rem;
+    }
+
+    .form-options {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+}
